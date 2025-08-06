@@ -6,14 +6,23 @@
     holding buffers for the duration of a data transfer."
 )]
 
+use airsoft_v2::mk_static;
+use airsoft_v2::web::{self, WebApp};
+use airsoft_v2::wifi::start_wifi;
 use bt_hci::controller::ExternalController;
 use defmt::info;
 use embassy_executor::Spawner;
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
+use esp_hal::i2c::master::I2c;
 use esp_hal::timer::timg::TimerGroup;
+use esp_hal::Async;
+use esp_hal_smartled::buffer_size;
 use esp_println as _;
 use esp_wifi::ble::controller::BleConnector;
+use esp_wifi::EspWifiController;
+use static_cell::StaticCell;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -52,12 +61,26 @@ async fn main(spawner: Spawner) {
 
     let rng = esp_hal::rng::Rng::new(peripherals.RNG);
     let timer1 = TimerGroup::new(peripherals.TIMG0);
-    let wifi_init =
-        esp_wifi::init(timer1.timer0, rng).expect("Failed to initialize WIFI/BLE controller");
-    let (mut _wifi_controller, _interfaces) = esp_wifi::wifi::new(&wifi_init, peripherals.WIFI)
-        .expect("Failed to initialize WIFI controller");
-    let transport = BleConnector::new(&wifi_init, peripherals.BT);
+    let esp_wifi_ctrl = mk_static!(
+        EspWifiController<'static>,
+        esp_wifi::init(timer1.timer0, rng).unwrap()
+    );
+
+    let transport = BleConnector::new(esp_wifi_ctrl, peripherals.BT);
     let _ble_controller = ExternalController::<_, 20>::new(transport);
+
+    info!("Attempting to start wifi..");
+    let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner).await;
+    let webapp = WebApp::default();
+
+    for id in 0..web::WEB_TASK_POOL_SIZE {
+        spawner.must_spawn(web::web_task(
+            id,
+            stack,
+            webapp.router,
+            webapp.config,
+        ));
+    }
 
     // TODO: Spawn some tasks
     let _ = spawner;
