@@ -1,93 +1,83 @@
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
-use embassy_time::{Duration, Timer};
+use defmt::error;
 use esp_hal::{i2c::master::I2c, Async};
-
-const LCD_BACKLIGHT: u8 = 0x08;
-const LCD_ENABLE: u8 = 0x04;
-const LCD_CMD: u8 = 0x00;
-const LCD_CHAR: u8 = 0x01;
+use hd44780_driver::{
+    bus::I2CBus,
+    charset::{CharsetUniversal, Fallback},
+    memory_map::MemoryMap1602,
+    setup::DisplayOptionsI2C,
+    HD44780, CursorBlink, Display, Cursor
+};
 
 type I2cType = I2c<'static, Async>;
+pub type LcdDisplay = HD44780<I2CBus<I2cType>, MemoryMap1602, Fallback<CharsetUniversal, 32>>;
+type LcdError = hd44780_driver::error::Error<esp_hal::i2c::master::Error>;
 
-pub struct I2cLcd<'a> {
-    address: u8,
-    i2c: &'a Mutex<NoopRawMutex, I2cType>,
+/// Extension trait for HD44780 to add convenient methods
+pub trait LcdExt {
+    /// Write text at a specific position (row: 0-1, col: 0-15 for 16x2 display)
+    fn write_at(&mut self, row: u8, col: u8, text: &str) -> Result<(), LcdError>;
+    
+    /// Display a message on the first line, clearing the display first
+    fn display_message(&mut self, message: &str) -> Result<(), LcdError>;
+    
+    /// Display a two-line message
+    fn display_two_lines(&mut self, line1: &str, line2: &str) -> Result<(), LcdError>;
+    
+    /// Toggle display on/off
+    fn toggle_display(&mut self, enabled: bool) -> Result<(), LcdError>;
+    
+    /// Configure cursor appearance (visible, blinking)
+    fn configure_cursor(&mut self, visible: bool, blink: bool) -> Result<(), LcdError>;
 }
 
-impl<'a> I2cLcd<'a> {
-    pub fn new(address: u8, i2c: &'a Mutex<NoopRawMutex, I2cType>) -> Self {
-        Self { address, i2c }
+/// Implement the extension trait for our LCD type
+impl LcdExt for LcdDisplay {
+    fn write_at(&mut self, row: u8, col: u8, text: &str) -> Result<(), LcdError> {
+        // Calculate position for 16x2 display (row 0: pos 0-15, row 1: pos 64-79)
+        let pos = if row == 0 { col } else { 64 + col };
+        self.set_cursor_pos(pos, &mut embassy_time::Delay)?;
+        self.write_str(text, &mut embassy_time::Delay)
     }
-
-    pub async fn init(&mut self) {
-        Timer::after(Duration::from_millis(50)).await;
-
-        // Initialize in 4-bit mode
-        self.write_nibble(0x03, false).await;
-        Timer::after(Duration::from_millis(5)).await;
-        self.write_nibble(0x03, false).await;
-        Timer::after(Duration::from_micros(150)).await;
-        self.write_nibble(0x03, false).await;
-        self.write_nibble(0x02, false).await;
-
-        // Function set: 4-bit, 2 lines, 5x8 dots
-        self.write_byte(0x28, false).await;
-        // Display on, cursor off, blink off
-        self.write_byte(0x0C, false).await;
-        // Clear display
-        self.write_byte(0x01, false).await;
-        Timer::after(Duration::from_millis(2)).await;
-        // Entry mode set
-        self.write_byte(0x06, false).await;
+    
+    fn display_message(&mut self, message: &str) -> Result<(), LcdError> {
+        self.reset(&mut embassy_time::Delay)?;
+        self.clear(&mut embassy_time::Delay)?;
+        self.write_str(message, &mut embassy_time::Delay)
     }
+    
+    fn display_two_lines(&mut self, line1: &str, line2: &str) -> Result<(), LcdError> {
+        self.reset(&mut embassy_time::Delay)?;
+        self.clear(&mut embassy_time::Delay)?;
+        self.write_at(0, 0, line1)?;
+        self.write_at(1, 0, line2)
+    }
+    
+    fn toggle_display(&mut self, enabled: bool) -> Result<(), LcdError> {
+        let display_mode = if enabled { Display::On } else { Display::Off };
+        self.set_display(display_mode, &mut embassy_time::Delay)
+    }
+    
+    fn configure_cursor(&mut self, visible: bool, blink: bool) -> Result<(), LcdError> {
+        let cursor_mode = if visible { Cursor::Visible } else { Cursor::Invisible };
+        self.set_cursor_visibility(cursor_mode, &mut embassy_time::Delay)?;
+        let blink_mode = if blink { CursorBlink::On } else { CursorBlink::Off };
+        self.set_cursor_blink(blink_mode, &mut embassy_time::Delay)
+    }
+}
 
-    async fn write_nibble(&mut self, nibble: u8, rs: bool) {
-        let data = (nibble << 4) | LCD_BACKLIGHT | if rs { LCD_CHAR } else { LCD_CMD };
-        {
-            let mut i2c = self.i2c.lock().await;
-            let _ = i2c.write(self.address, &[data | LCD_ENABLE]);
+/// Helper function to create and initialize an LCD display
+pub async fn create_lcd(address: u8, i2c: I2cType) -> LcdDisplay {
+    let mut options = DisplayOptionsI2C::new(MemoryMap1602::new()).with_i2c_bus(i2c, address);
+
+    loop {
+        match HD44780::new(options, &mut embassy_time::Delay) {
+            Err((options_back, error)) => {
+                error!("Error creating LCD Driver: {:?}", defmt::Debug2Format(&error));
+                options = options_back;
+                embassy_time::Timer::after(embassy_time::Duration::from_millis(500)).await;
+                // try again
+            }
+            Ok(display) => break display,
         }
-        Timer::after(Duration::from_micros(1)).await;
-        {
-            let mut i2c = self.i2c.lock().await;
-            let _ = i2c.write(self.address, &[data & !LCD_ENABLE]);
-        }
-        Timer::after(Duration::from_micros(50)).await;
-    }
-
-    async fn write_byte(&mut self, byte: u8, rs: bool) {
-        self.write_nibble(byte >> 4, rs).await;
-        self.write_nibble(byte & 0x0F, rs).await;
-    }
-
-    pub async fn clear(&mut self) {
-        self.write_byte(0x01, false).await;
-        Timer::after(Duration::from_millis(2)).await;
-    }
-
-    pub async fn set_cursor(&mut self, col: u8, row: u8) {
-        let row_offsets = [0x00, 0x40];
-        self.write_byte(0x80 | (col + row_offsets[row as usize]), false).await;
-    }
-
-    pub async fn print(&mut self, text: &str) {
-        for ch in text.chars() {
-            self.write_byte(ch as u8, true).await;
-        }
-    }
-
-    // Helper method to print at a specific position
-    pub async fn print_at(&mut self, col: u8, row: u8, text: &str) {
-        self.set_cursor(col, row).await;
-        self.print(text).await;
-    }
-
-    // Helper method to clear a line and print new text
-    pub async fn clear_line_and_print(&mut self, row: u8, text: &str) {
-        self.set_cursor(0, row).await;
-        // Clear the line by writing spaces
-        self.print("                ").await; // 16 spaces for 16x2 LCD
-        self.set_cursor(0, row).await;
-        self.print(text).await;
     }
 }
