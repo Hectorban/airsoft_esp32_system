@@ -20,6 +20,7 @@ use airsoft_v2::tasks::{
     display_task, lights_task, sound_task
 };
 
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice as BlockingSpiDevice;
 use defmt::{error, info};
 use embassy_executor::Spawner;
@@ -30,7 +31,8 @@ use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::ledc::{self, timer, LSGlobalClkSource, Ledc};
 use esp_hal::i2c::master::I2c;
 use esp_hal_buzzer::Buzzer;
-use mfrc522::Mfrc522;
+use mfrc522::comm::blocking::spi::{DummyDelay, SpiInterface};
+use mfrc522::{Initialized, Mfrc522};
 use core::cell::RefCell;
 use esp_hal::clock::CpuClock;
 use esp_hal::rmt::Rmt;
@@ -63,6 +65,7 @@ const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 
 static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2cType>> = StaticCell::new();
 static SPI_BUS_BLOCKING: StaticCell<BlockingMutex<NoopRawMutex, RefCell<Spi<'static, Async>>>> = StaticCell::new();
+static MFRC522_CS: StaticCell<Output<'static>> = StaticCell::new();
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
 static DISPLAY_CHANNEL: StaticCell<DisplayChannel> = StaticCell::new();
 static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
@@ -207,19 +210,9 @@ async fn main(spawner: Spawner) {
 
     let spi_bus_blocking = SPI_BUS_BLOCKING.init(BlockingMutex::new(RefCell::new(spi_bus)));
 
-    let sd_cs = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
-    let spi_device = BlockingSpiDevice::new(spi_bus, sd_cs);
-    let spi_interface = mfrc522::comm::blocking::spi::SpiInterface::new(spi_device);
-    let mut mfrc522 = match Mfrc522::new(spi_interface).init() {
-        Ok(mfrc522) => mfrc522,
-        Err(e) => {
-            error!("Failed to initialize MFRC522: {:?}", defmt::Debug2Format(&e));
-            return;
-        }
-    };
     
     // Spawn game tasks
-    spawner.must_spawn(input_task(keypad, mfrc522, event_bus.event_sender));
+    spawner.must_spawn(input_task(keypad, peripherals.GPIO5, spi_bus_blocking, event_bus.event_sender));
     spawner.must_spawn(game_loop_task(game_manager, event_bus.event_receiver, task_senders));
     spawner.must_spawn(timer_task(event_bus.event_sender));
     
@@ -229,13 +222,25 @@ async fn main(spawner: Spawner) {
     }
 }
 
-// Input handling task
+
 #[embassy_executor::task]
 async fn input_task(
     mut keypad: keypad::I2cKeypad,
-    mut mfrc522: Mfrc522,
+    gpio5: esp_hal::peripherals::GPIO5<'static>, 
+    spi_bus: &'static BlockingMutex<NoopRawMutex, RefCell<Spi<'static, Async>>>,
     event_sender: embassy_sync::channel::Sender<'static, NoopRawMutex, GameEvent, EVENT_QUEUE_SIZE>,
 ) {
+    let sd_cs = Output::new(gpio5, Level::High, OutputConfig::default());
+    let spi_device = BlockingSpiDevice::new(spi_bus, sd_cs);
+    let spi_interface = mfrc522::comm::blocking::spi::SpiInterface::new(spi_device);
+    let mut mfrc522 = match Mfrc522::new(spi_interface).init() {
+        Ok(mfrc522) => mfrc522,
+        Err(e) => {
+            error!("Failed to initialize MFRC522: {:?}", defmt::Debug2Format(&e));
+            return;
+        }
+    };
+
     loop {
         if let Some(key) = keypad.scan().await {
             let event = match key {

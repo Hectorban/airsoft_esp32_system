@@ -1,15 +1,13 @@
 use embassy_sync::channel::{Channel, Receiver};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_time::{Delay, Timer, Duration};
+use embassy_time::Delay;
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use esp_hal::i2c::master::I2c;
 use esp_hal::Async;
 use hd44780_driver::bus::I2CBus;
-use hd44780_driver::charset::{CharsetUniversal, CharsetWithFallback, Fallback};
+use hd44780_driver::charset::{CharsetUniversal, Fallback};
 use hd44780_driver::non_blocking::HD44780;
-use hd44780_driver::memory_map::{MemoryMap1602, StandardMemoryMap};
-use hd44780_driver::setup::DisplayOptionsI2C;
-use defmt::error;
+use hd44780_driver::memory_map::StandardMemoryMap;
 
 extern crate alloc;
 use alloc::string::String;

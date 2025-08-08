@@ -1,5 +1,5 @@
 use crate::events::{GameEvent, TaskSenders};
-use crate::tasks::{DisplayCommand, LightsCommand, SoundCommand};
+use crate::tasks::{LightsCommand, SoundCommand};
 use esp_hal::rng::Rng;
 use defmt::info;
 
@@ -262,13 +262,10 @@ impl GameManager {
         event: GameEvent,
         task_senders: &TaskSenders,
     ) {
-        match event {
-            GameEvent::MenuSelect => {
-                // Back to main menu for now
-                self.state = GameState::MainMenu;
-                self.render_main_menu(task_senders).await;
-            }
-            _ => {}
+        if let GameEvent::MenuSelect = event {
+            // Back to main menu for now
+            self.state = GameState::MainMenu;
+            self.render_main_menu(task_senders).await;
         }
     }
 
@@ -282,15 +279,15 @@ impl GameManager {
         
         // Add navigation arrows if needed
         if self.menu.can_move_up() {
-            let _ = line2.push('↑');
+            line2.push('↑');
         } else {
-            let _ = line2.push(' ');
+            line2.push(' ');
         }
         
-        let _ = line2.push_str(selected);
+        line2.push_str(selected);
         
         if self.menu.can_move_down() {
-            let _ = line2.push('↓');
+            line2.push('↓');
         }
         
         let _ = task_senders.display.send(crate::tasks::DisplayCommand::WriteText { line1, line2 }).await;
@@ -312,9 +309,9 @@ impl GameManager {
                 let mut line2 = String::from("Code: ");
                 for i in 0..4 {
                     if i < digits_entered {
-                        let _ = line2.push('*');
+                        line2.push('*');
                     } else {
-                        let _ = line2.push('_');
+                        line2.push('_');
                     }
                 }
                 (
@@ -328,7 +325,7 @@ impl GameManager {
                 let minutes = time_left_seconds / 60;
                 let seconds = time_left_seconds % 60;
                 let mut line2 = String::new();
-                let _ = write!(line2, "{}:{:02} Press B", minutes, seconds);
+                let _ = write!(line2, "{minutes}:{seconds:02} Press B");
                 (
                     String::from("BOMB ARMED!"),
                     line2,
@@ -340,9 +337,9 @@ impl GameManager {
                 let mut line2 = String::from("Code: ");
                 for i in 0..4 {
                     if i < digits_entered {
-                        let _ = line2.push('*');
+                        line2.push('*');
                     } else {
-                        let _ = line2.push('_');
+                        line2.push('_');
                     }
                 }
                 (

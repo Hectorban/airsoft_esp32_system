@@ -1,5 +1,5 @@
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Timer, Instant};
 use embedded_hal_async::i2c::I2c;
 use esp_hal::{i2c::master::I2c as EspI2c, Async};
