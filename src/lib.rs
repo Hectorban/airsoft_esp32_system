@@ -1,11 +1,12 @@
 #![no_std]
 #![feature(impl_trait_in_assoc_type)]
 
-pub mod lcd;
-pub mod keypad;
-pub mod neopixel;
+pub mod devices;
 pub mod wifi;
 pub mod web;
+pub mod events;
+pub mod game;
+pub mod tasks;
 
 #[macro_export]
 macro_rules! mk_static {

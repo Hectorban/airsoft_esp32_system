@@ -15,13 +15,13 @@ impl<const CHANNEL: u8, const N: usize> NeoPixelStrip<CHANNEL, N> {
     }
 
     pub fn set_all_color(&mut self, color: RGB8) -> Result<(), LedAdapterError> {
-        let colors = core::iter::repeat(color).take(self.num_leds);
+        let colors = core::iter::repeat_n(color, self.num_leds);
         self.adapter.write(brightness(colors, BRIGHTNESS))
     }
 
     pub fn off_all(&mut self) -> Result<(), LedAdapterError> {
         let black = RGB8::new(0, 0, 0);
-        let colors = core::iter::repeat(black).take(self.num_leds);
+        let colors = core::iter::repeat_n(black, self.num_leds);
         self.adapter.write(brightness(colors, BRIGHTNESS))
     }
 }
