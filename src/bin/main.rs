@@ -6,48 +6,52 @@
     holding buffers for the duration of a data transfer."
 )]
 
+use airsoft_v2::app::main_menu::MainMenu;
+use airsoft_v2::app::App;
 use airsoft_v2::devices::buzzer::STARTUP_SOUND;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
+use airsoft_v2::events::Command;
+use airsoft_v2::events::{EventBus, EventChannel, InputEvent, TaskSenders, EVENT_QUEUE_SIZE};
+use airsoft_v2::tasks::input::{keypad::keypad_task, nfc::nfc_task};
+use airsoft_v2::tasks::internal::game_ticker_task;
+use airsoft_v2::tasks::output::display::ScrollDirection;
+use airsoft_v2::tasks::output::lights::LightsCommand;
+use airsoft_v2::tasks::output::{ 
+    display::{display_task, DisplayChannel, DisplayCommand},
+    lights::{lights_task, LightsChannel},
+    sound::{sound_task, SoundChannel, SoundCommand},
+};
 use airsoft_v2::web::{self, WebApp};
 use airsoft_v2::wifi::start_wifi;
 use airsoft_v2::{devices::keypad, mk_static};
-use airsoft_v2::devices::nfc;
-use airsoft_v2::events::{EventChannel, EventBus, GameEvent, TaskSenders, EVENT_QUEUE_SIZE};
-use airsoft_v2::game::GameManager;
-use airsoft_v2::tasks::{
-    DisplayChannel, LightsChannel, SoundChannel,
-    DisplayCommand, LightsCommand, SoundCommand,
-    display_task, lights_task, sound_task
-};
 
-use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
-use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice as BlockingSpiDevice;
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::string::ToString;
 use defmt::{error, info};
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
-use embassy_sync::blocking_mutex::Mutex as BlockingMutex;
 use embassy_time::{Delay, Duration, Timer};
-use esp_hal::gpio::{Level, Output, OutputConfig};
-use esp_hal::ledc::{self, timer, LSGlobalClkSource, Ledc};
-use esp_hal::i2c::master::I2c;
-use esp_hal_buzzer::Buzzer;
-use mfrc522::comm::blocking::spi::{DummyDelay, SpiInterface};
-use mfrc522::{Initialized, Mfrc522};
-use core::cell::RefCell;
 use esp_hal::clock::CpuClock;
+use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_hal::i2c::master::I2c;
+use esp_hal::ledc::{self, timer, LSGlobalClkSource, Ledc};
 use esp_hal::rmt::Rmt;
-use esp_hal::spi::master::Spi;
 use esp_hal::spi;
+use esp_hal::spi::master::Spi;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{i2c, Async};
+use esp_hal_buzzer::Buzzer;
+use esp_hal_mfrc522::MFRC522;
 use esp_hal_smartled::{buffer_size, smart_led_buffer, SmartLedsAdapter};
 use esp_println as _;
 use esp_wifi::EspWifiController;
 use hd44780_driver::memory_map::MemoryMap1602;
-use hd44780_driver::setup::DisplayOptionsI2C;
 use hd44780_driver::non_blocking::HD44780;
-use static_cell::StaticCell;    
+use hd44780_driver::setup::DisplayOptionsI2C;
+use static_cell::StaticCell;
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 
@@ -64,12 +68,11 @@ const LCD_ADDRESS: u8 = 0x27; // or 0x3F
 const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 
 static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2cType>> = StaticCell::new();
-static SPI_BUS_BLOCKING: StaticCell<BlockingMutex<NoopRawMutex, RefCell<Spi<'static, Async>>>> = StaticCell::new();
-static MFRC522_CS: StaticCell<Output<'static>> = StaticCell::new();
+static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCell::new();
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
-static DISPLAY_CHANNEL: StaticCell<DisplayChannel> = StaticCell::new();
 static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
 static SOUND_CHANNEL: StaticCell<SoundChannel> = StaticCell::new();
+static DISPLAY_CHANNEL: StaticCell<DisplayChannel> = StaticCell::new();
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -97,9 +100,6 @@ async fn main(spawner: Spawner) {
         esp_wifi::init(timer1.timer0, rng).unwrap()
     );
 
-    // let transport = BleConnector::new(esp_wifi_ctrl, peripherals.BT);
-    // let _ble_controller = ExternalController::<_, 20>::new(transport);
-
     info!("Attempting to start wifi..");
     let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner).await;
     let webapp = WebApp::default();
@@ -107,6 +107,8 @@ async fn main(spawner: Spawner) {
     for id in 0..web::WEB_TASK_POOL_SIZE {
         spawner.must_spawn(web::web_task(id, stack, webapp.router, webapp.config));
     }
+
+    info!("Wifi started!");
 
     // TODO Abstract spawning of devices
 
@@ -122,12 +124,16 @@ async fn main(spawner: Spawner) {
     let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
     let lcd_i2c = I2cDevice::new(i2c_bus);
-    let mut options = DisplayOptionsI2C::new(MemoryMap1602::new()).with_i2c_bus(lcd_i2c, LCD_ADDRESS);
+    let mut options =
+        DisplayOptionsI2C::new(MemoryMap1602::new()).with_i2c_bus(lcd_i2c, LCD_ADDRESS);
 
     let display = loop {
         match HD44780::new(options, &mut Delay).await {
             Err((options_back, error)) => {
-                error!("Error creating LCD Driver: {:?}", defmt::Debug2Format(&error));
+                error!(
+                    "Error creating LCD Driver: {:?}",
+                    defmt::Debug2Format(&error)
+                );
                 options = options_back;
                 Timer::after(Duration::from_millis(100)).await;
             }
@@ -138,6 +144,7 @@ async fn main(spawner: Spawner) {
     let display_channel = DISPLAY_CHANNEL.init(DisplayChannel::new());
     spawner.must_spawn(display_task(display_channel.receiver(), display));
 
+    info!("Connecting to neopixel strips..");
     // Initialize NeoPixels
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
     let buffer1 = smart_led_buffer!(10);
@@ -159,9 +166,13 @@ async fn main(spawner: Spawner) {
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
 
     let lights_channel = LIGHTS_CHANNEL.init(LightsChannel::new());
-    spawner.must_spawn(lights_task(lights_channel.receiver(), led_strip1, led_strip2));
+    spawner.must_spawn(lights_task(
+        lights_channel.receiver(),
+        led_strip1,
+        led_strip2,
+    ));
 
-    let mut buzzer = Buzzer::new(
+    let buzzer = Buzzer::new(
         ledc,
         timer::Number::Timer0,
         ledc::channel::Number::Channel1,
@@ -174,29 +185,49 @@ async fn main(spawner: Spawner) {
     // Initialize event bus
     let event_channel = EVENT_CHANNEL.init(EventChannel::new());
     let event_bus = EventBus::new(event_channel);
-    
+
     // Create task senders
     let task_senders = TaskSenders {
         display: display_channel.sender(),
         lights: lights_channel.sender(),
         sound: sound_channel.sender(),
     };
-    
-    // Initialize game manager
-    let game_manager = GameManager::new(rng);
-    
+
     // Play startup sound and show initial display before spawning tasks
-    let _ = task_senders.sound.send(SoundCommand::PlaySong { song: &STARTUP_SOUND }).await;
-    let _ = task_senders.display.send(DisplayCommand::WriteText {
-        line1: alloc::string::String::from("Airsoft Master"),
-        line2: alloc::string::String::from("↓Search & Destroy"),
-    }).await;
-    
+    task_senders
+        .sound
+        .send(SoundCommand::PlaySong {
+            song: &STARTUP_SOUND,
+        })
+        .await;
+
+    task_senders
+        .lights
+        .send(LightsCommand::Flash {
+            r: 255,
+            g: 255,
+            b: 255,
+            duration_ms: 100,
+        })
+        .await;
+    task_senders
+        .display
+        .send(DisplayCommand::ScrollText {
+            text: "Airsoft".to_string(),
+            col: 0,
+            times: 2,
+            direction: ScrollDirection::Right,
+        })
+        .await;
+
+    // give time for the animation to finish
+    Timer::after(Duration::from_secs(4)).await;
+
     // Connect to inputs
     let keypad_i2c = I2cDevice::new(i2c_bus);
     let keypad = keypad::I2cKeypad::new(KEYPAD_ADDRESS, keypad_i2c);
 
-    let spi_bus = Spi::new(
+    let spi = Spi::new(
         peripherals.SPI2,
         spi::master::Config::default()
             .with_frequency(Rate::from_mhz(5))
@@ -208,100 +239,55 @@ async fn main(spawner: Spawner) {
     .with_miso(peripherals.GPIO19)
     .into_async();
 
-    let spi_bus_blocking = SPI_BUS_BLOCKING.init(BlockingMutex::new(RefCell::new(spi_bus)));
+    let cs = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
+    let spi_bus = SPI_BUS.init(Mutex::new(spi));
+    let spi_device = SpiDevice::new(spi_bus, cs);
 
-    
-    // Spawn game tasks
-    spawner.must_spawn(input_task(keypad, peripherals.GPIO5, spi_bus_blocking, event_bus.event_sender));
-    spawner.must_spawn(game_loop_task(game_manager, event_bus.event_receiver, task_senders));
-    spawner.must_spawn(timer_task(event_bus.event_sender));
-    
+    let mfrc522 = MFRC522::new(spi_device, || embassy_time::Instant::now().as_ticks());
+
+    // Spawn input tasks
+    spawner.must_spawn(keypad_task(keypad, event_bus.event_sender));
+    spawner.must_spawn(nfc_task(mfrc522, event_bus.event_sender));
+
+    // Spawn game ticker task
+    spawner.must_spawn(game_ticker_task(event_bus.event_sender));
+
+    info!("All Side tasks spawned!");
     // Keep main task alive
+    info!("Initiating main task loop");
+
+    let mut current_app: Box<dyn App> = Box::new(MainMenu::default());
+
+
     loop {
-        Timer::after(Duration::from_secs(1)).await;
-    }
-}
+        // TODO we can make this follow a state machine pattern or component pattern to make it more extensible
+        // We only need to figure out sound and future output devices like servos, etc
 
-
-#[embassy_executor::task]
-async fn input_task(
-    mut keypad: keypad::I2cKeypad,
-    gpio5: esp_hal::peripherals::GPIO5<'static>, 
-    spi_bus: &'static BlockingMutex<NoopRawMutex, RefCell<Spi<'static, Async>>>,
-    event_sender: embassy_sync::channel::Sender<'static, NoopRawMutex, GameEvent, EVENT_QUEUE_SIZE>,
-) {
-    let sd_cs = Output::new(gpio5, Level::High, OutputConfig::default());
-    let spi_device = BlockingSpiDevice::new(spi_bus, sd_cs);
-    let spi_interface = mfrc522::comm::blocking::spi::SpiInterface::new(spi_device);
-    let mut mfrc522 = match Mfrc522::new(spi_interface).init() {
-        Ok(mfrc522) => mfrc522,
-        Err(e) => {
-            error!("Failed to initialize MFRC522: {:?}", defmt::Debug2Format(&e));
-            return;
+        // Dont trigger game tick events if the app doesn't need them
+        let commands = current_app.render();
+        for command in commands {
+            match command {
+                Command::DisplayText(display_command) => {
+                    task_senders.display.send(display_command).await;
+                }
+                Command::Lights(lights_command) => {
+                    task_senders.lights.send(lights_command).await;
+                }
+                Command::Sound(sound_command) => {
+                    task_senders.sound.send(sound_command).await;
+                }
+                Command::ChangeApp(app) => {
+                    current_app = app;
+                    // Send a None event to the app to trigger the first render
+                    // This is a bit of a hack, but it works
+                    event_bus.event_sender.send(InputEvent::None).await;
+                }
+                Command::Noop => {}
+            }
         }
-    };
 
-    loop {
-        if let Some(key) = keypad.scan().await {
-            let event = match key {
-                'A' | 'a' => GameEvent::MenuUp,
-                'B' | 'b' => GameEvent::MenuDown,
-                '4' => GameEvent::MenuSelect,
-                '0'..='9' => {
-                    if let Some(digit) = key.to_digit(10) {
-                        GameEvent::CodeDigit(digit as u8)
-                    } else {
-                        continue;
-                    }
-                },
-                _ => continue,
-            };
-            
-            // Convert menu events to game events based on context
-            let final_event = match event {
-                GameEvent::MenuUp => {
-                    // In game modes, 'A' might mean arm
-                    GameEvent::GameArm
-                },
-                GameEvent::MenuDown => {
-                    // In game modes, 'B' might mean disarm  
-                    GameEvent::GameDisarm
-                },
-                other => other,
-            };
-            
-            let _ = event_sender.send(final_event).await;
-        }
-        Timer::after(Duration::from_millis(50)).await;
-    }
-}
 
-// Game loop task
-#[embassy_executor::task]
-async fn game_loop_task(
-    mut game_manager: GameManager,
-    event_receiver: embassy_sync::channel::Receiver<'static, NoopRawMutex, GameEvent, EVENT_QUEUE_SIZE>,
-    task_senders: TaskSenders,
-) {
-    // Initial render of main menu
-    let _ = task_senders.display.send(DisplayCommand::WriteText {
-        line1: alloc::string::String::from("Airsoft Master"),
-        line2: alloc::string::String::from("↓Search & Destroy"),
-    }).await;
-    
-    loop {
-        let event = event_receiver.receive().await;
-        game_manager.handle_event(event, &task_senders).await;
-    }
-}
-
-// Timer task for game countdown
-#[embassy_executor::task]
-async fn timer_task(
-    event_sender: embassy_sync::channel::Sender<'static, NoopRawMutex, GameEvent, EVENT_QUEUE_SIZE>,
-) {
-    loop {
-        Timer::after(Duration::from_secs(1)).await;
-        let _ = event_sender.send(GameEvent::TimerTick).await;
+        let event = event_bus.event_receiver.receive().await;
+        current_app.handle_event(event);
     }
 }

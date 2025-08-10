@@ -29,7 +29,7 @@ impl I2cKeypad {
             i2c,
             last_key: None,
             last_press_time: None,
-            debounce_duration: Duration::from_millis(50), // 50ms debounce
+            debounce_duration: Duration::from_millis(100), // 100ms debounce
         }
     }
 
@@ -77,22 +77,35 @@ impl I2cKeypad {
         for col in 0..4 {
             // Set column low, others high
             let col_mask = !(1 << (col + 4));
-            let _ = self.i2c.write(self.address, &[col_mask]).await;
+            if let Err(_) = self.i2c.write(self.address, &[col_mask]).await {
+                // I2C write failed, skip this column
+                continue;
+            }
             Timer::after(Duration::from_micros(10)).await;
 
             // Read rows
             let mut buf = [0u8];
-            let read_ok = self.i2c.read(self.address, &mut buf).await.is_ok();
-
-            if read_ok {
-                let rows = buf[0] & 0x0F;
-
-                for row in 0..4 {
-                    if rows & (1 << row) == 0 {
-                        // Reset all columns high
-                        let _ = self.i2c.write(self.address, &[0xF0]).await;
-                        return Some(Self::KEYPAD_KEYS[row][col]);
+            match self.i2c.read(self.address, &mut buf).await {
+                Ok(_) => {
+                    let rows = buf[0] & 0x0F;
+                    
+                    // Add some basic noise filtering
+                    if rows == 0x0F {
+                        // All rows high - no key pressed, continue
+                        continue;
                     }
+                    
+                    for row in 0..4 {
+                        if rows & (1 << row) == 0 {
+                            // Reset all columns high
+                            let _ = self.i2c.write(self.address, &[0xF0]).await;
+                            return Some(Self::KEYPAD_KEYS[row][col]);
+                        }
+                    }
+                }
+                Err(_) => {
+                    // I2C read failed, skip this scan cycle
+                    continue;
                 }
             }
         }

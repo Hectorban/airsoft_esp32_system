@@ -22,6 +22,7 @@ pub async fn sound_task(
     mut buzzer: esp_hal_buzzer::Buzzer<'static>,
     receiver: Receiver<'static, NoopRawMutex, SoundCommand, SOUND_QUEUE_SIZE>,
 ) {
+    // Todo Background BGM?
     loop {
         let command = receiver.receive().await;
         match command {

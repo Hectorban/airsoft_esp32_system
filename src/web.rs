@@ -4,7 +4,7 @@ use picoserve::{response::File, routing, AppBuilder, AppRouter, Router};
 
 pub struct Application;
 
-pub const WEB_TASK_POOL_SIZE: usize = 2;
+pub const WEB_TASK_POOL_SIZE: usize = 1;
 
 impl AppBuilder for Application {
     type PathRouter = impl routing::PathRouter;

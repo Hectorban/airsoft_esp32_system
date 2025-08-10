@@ -22,11 +22,11 @@ dependencies = [
  "esp-hal",
  "esp-hal-buzzer",
  "esp-hal-embassy",
+ "esp-hal-mfrc522",
  "esp-hal-smartled",
  "esp-println",
  "esp-wifi",
  "hd44780-driver",
- "mfrc522",
  "picoserve",
  "smart-leds",
  "smoltcp",
@@ -693,6 +693,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "esp-hal-mfrc522"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1af6ff595b0798c601021e29b5addbb531bfebfd0beda827a76adcecac2059a"
+dependencies = [
+ "embedded-hal-async",
+ "heapless",
+ "log",
+]
+
+[[package]]
 name = "esp-hal-procmacros"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1170,16 +1181,6 @@ name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
-
-[[package]]
-name = "mfrc522"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "543f2c392f438e427aa9009338710434884b0dc95d0c39110f456846be0aa352"
-dependencies = [
- "embedded-hal 1.0.0",
- "heapless",
-]
 
 [[package]]
 name = "nb"

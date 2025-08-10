@@ -5,8 +5,8 @@ pub mod devices;
 pub mod wifi;
 pub mod web;
 pub mod events;
-pub mod game;
 pub mod tasks;
+pub mod app;
 
 #[macro_export]
 macro_rules! mk_static {

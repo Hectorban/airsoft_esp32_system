@@ -26,6 +26,7 @@ pub async fn lights_task(
     let _ = led_strip1.off_all();
     let _ = led_strip2.off_all();
     
+    // Todo Background BGM?
     loop {
         let command = receiver.receive().await;
         match command {
