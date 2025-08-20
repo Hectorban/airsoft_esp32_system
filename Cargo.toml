@@ -67,6 +67,9 @@ embedded-hal-async = "1.0.0"
 embassy-embedded-hal = { version = "0.4.0", features = ["defmt"] }
 esp-hal-mfrc522 = "0.2.1"
 esp-hal-buzzer = { version = "0.1.0", features = ["defmt", "esp32"] }
+anyhow = { version = "1.0.98", default-features = false }
+esp-hal-dhcp-server = "0.2.6"
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 
 
 [profile.dev]

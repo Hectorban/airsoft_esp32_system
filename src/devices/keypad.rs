@@ -3,6 +3,7 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Timer, Instant};
 use embedded_hal_async::i2c::I2c;
 use esp_hal::{i2c::master::I2c as EspI2c, Async};
+use defmt::info;
 
 type I2cType = EspI2c<'static, Async>;
 type SharedI2cDevice = I2cDevice<'static, NoopRawMutex, I2cType>;
@@ -21,6 +22,20 @@ impl I2cKeypad {
         ['c', '9', '8', '7'],
         ['b', '6', '5', '4'],
         ['a', '3', '2', '1'],
+    ];
+
+    const KEYPAD_KEYS_2: [[char; 4]; 4] = [
+        ['1', '2', '3', 'a'],
+        ['4', '5', '6', 'b'],
+        ['7', '8', '9', 'c'],
+        ['*', '0', '#', 'd'],
+    ];
+
+    const KEYPAD_KEYS_3: [[char; 4]; 4] = [
+        ['d', 'c', 'b', 'a'],
+        ['#', '9', '6', '3'],
+        ['0', '8', '5', '2'],
+        ['*', '7', '4', '1'],
     ];
 
     pub fn new(address: u8, i2c: SharedI2cDevice) -> Self {
@@ -99,7 +114,8 @@ impl I2cKeypad {
                         if rows & (1 << row) == 0 {
                             // Reset all columns high
                             let _ = self.i2c.write(self.address, &[0xF0]).await;
-                            return Some(Self::KEYPAD_KEYS[row][col]);
+                            info!("address: {} {}", row, col);
+                            return Some(Self::KEYPAD_KEYS_3[row][col]);
                         }
                     }
                 }

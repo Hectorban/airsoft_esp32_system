@@ -19,8 +19,8 @@ pub type LightsChannel = Channel<NoopRawMutex, LightsCommand, { LIGHTS_QUEUE_SIZ
 #[embassy_executor::task]
 pub async fn lights_task(
     receiver: Receiver<'static, NoopRawMutex, LightsCommand, { LIGHTS_QUEUE_SIZE }>,
-    mut led_strip1: NeoPixelStrip<0, 241>,
-    mut led_strip2: NeoPixelStrip<1, 241>,
+    mut led_strip1: NeoPixelStrip<0, 217>,
+    mut led_strip2: NeoPixelStrip<1, 217>,
 ) {
     // Turn off LEDs initially
     let _ = led_strip1.off_all();

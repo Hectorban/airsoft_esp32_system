@@ -1,19 +1,32 @@
 use embassy_net::Stack;
 use embassy_time::Duration;
-use picoserve::{response::File, routing, AppBuilder, AppRouter, Router};
+use picoserve::{response::File, routing, AppBuilder, AppRouter, Router, extract::State, response::Json};
+use crate::game_state;
+extern crate alloc;
+use alloc::string::String;
 
 pub struct Application;
 
 pub const WEB_TASK_POOL_SIZE: usize = 1;
 
+async fn current_state_handler() -> Json<game_state::GameState> {
+    let state = game_state::get_current_state().await;
+    Json(state)
+}
+
 impl AppBuilder for Application {
     type PathRouter = impl routing::PathRouter;
 
     fn build_app(self) -> picoserve::Router<Self::PathRouter> {
-        picoserve::Router::new().route(
-            "/",
-            routing::get_service(File::html(include_str!("index.html"))),
-        )
+        picoserve::Router::new()
+            .route(
+                "/",
+                routing::get_service(File::html(include_str!("index.html"))),
+            )
+            .route(
+                "/current_state",
+                routing::get(current_state_handler),
+            )
     }
 }
 

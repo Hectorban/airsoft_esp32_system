@@ -7,6 +7,7 @@
 )]
 
 use airsoft_v2::app::main_menu::MainMenu;
+use airsoft_v2::app::search_and_destroy::SearchAndDestroy;
 use airsoft_v2::app::App;
 use airsoft_v2::devices::buzzer::STARTUP_SOUND;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
@@ -16,17 +17,16 @@ use airsoft_v2::tasks::input::{keypad::keypad_task, nfc::nfc_task};
 use airsoft_v2::tasks::internal::game_ticker_task;
 use airsoft_v2::tasks::output::display::ScrollDirection;
 use airsoft_v2::tasks::output::lights::LightsCommand;
-use airsoft_v2::tasks::output::{ 
+use airsoft_v2::tasks::output::{
     display::{display_task, DisplayChannel, DisplayCommand},
     lights::{lights_task, LightsChannel},
     sound::{sound_task, SoundChannel, SoundCommand},
 };
 use airsoft_v2::web::{self, WebApp};
-use airsoft_v2::wifi::start_wifi;
-use airsoft_v2::{devices::keypad, mk_static};
+use airsoft_v2::wifi::{dhcp_server, start_wifi};
+use airsoft_v2::{devices::keypad, mk_static, game_state};
 
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::string::ToString;
 use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
@@ -59,7 +59,7 @@ extern crate alloc;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-const NUM_LEDS: usize = 10;
+const NUM_LEDS: usize = 9;
 const BUFFER_SIZE: usize = buffer_size(NUM_LEDS);
 
 type I2cType = I2c<'static, esp_hal::Async>;
@@ -101,14 +101,10 @@ async fn main(spawner: Spawner) {
     );
 
     info!("Attempting to start wifi..");
-    let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner).await;
-    let webapp = WebApp::default();
+    let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
+        .await
+        .expect("Failed to start wifi");
 
-    for id in 0..web::WEB_TASK_POOL_SIZE {
-        spawner.must_spawn(web::web_task(id, stack, webapp.router, webapp.config));
-    }
-
-    info!("Wifi started!");
 
     // TODO Abstract spawning of devices
 
@@ -147,15 +143,15 @@ async fn main(spawner: Spawner) {
     info!("Connecting to neopixel strips..");
     // Initialize NeoPixels
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
-    let buffer1 = smart_led_buffer!(10);
-    let buffer2 = smart_led_buffer!(10);
+    let buffer1 = smart_led_buffer!(NUM_LEDS);
+    let buffer2 = smart_led_buffer!(NUM_LEDS);
 
     let mut led_strip1 = NeoPixelStrip::<0, BUFFER_SIZE>::new(
-        SmartLedsAdapter::new(rmt.channel0, peripherals.GPIO32, buffer1),
+        SmartLedsAdapter::new(rmt.channel0, peripherals.GPIO4, buffer1),
         NUM_LEDS,
     );
     let mut led_strip2 = NeoPixelStrip::<1, BUFFER_SIZE>::new(
-        SmartLedsAdapter::new(rmt.channel1, peripherals.GPIO33, buffer2),
+        SmartLedsAdapter::new(rmt.channel1, peripherals.GPIO2, buffer2),
         NUM_LEDS,
     );
 
@@ -253,15 +249,54 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(game_ticker_task(event_bus.event_sender));
 
     info!("All Side tasks spawned!");
+    
+    // Initialize shared game state for web API
+    game_state::init_game_state();
+    info!("Game state initialized!");
+    
+    // Start web server and DHCP server after game state is initialized
+    let webapp = WebApp::default();
+    spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
+    spawner.must_spawn(dhcp_server(stack));
+    info!("Web server started!");
+    
     // Keep main task alive
     info!("Initiating main task loop");
 
     let mut current_app: Box<dyn App> = Box::new(MainMenu::default());
 
-
     loop {
         // TODO we can make this follow a state machine pattern or component pattern to make it more extensible
         // We only need to figure out sound and future output devices like servos, etc
+
+        // Update game state for web API based on current app
+        // This is a bit of a hack since we need to check the concrete type
+        if let Some(main_menu) = current_app.as_any().downcast_ref::<MainMenu>() {
+            let selection = match main_menu.current_selection {
+                airsoft_v2::app::main_menu::MainMenuSelection::SearchAndDestroy => "search_and_destroy",
+                airsoft_v2::app::main_menu::MainMenuSelection::TeamDeathMatch => "team_death_match",
+                airsoft_v2::app::main_menu::MainMenuSelection::Domination => "domination",
+                airsoft_v2::app::main_menu::MainMenuSelection::Cashout => "cashout",
+                airsoft_v2::app::main_menu::MainMenuSelection::Config => "config",
+            };
+            game_state::update_main_menu_state(selection, main_menu.has_selected).await;
+        } else if let Some(sad) = current_app.as_any().downcast_ref::<SearchAndDestroy>() {
+            let stage = match sad.stage {
+                airsoft_v2::app::search_and_destroy::Stage::WaitingForArm => "waiting_for_arm",
+                airsoft_v2::app::search_and_destroy::Stage::Arming => "arming",
+                airsoft_v2::app::search_and_destroy::Stage::Armed => "armed",
+                airsoft_v2::app::search_and_destroy::Stage::Ticking => "ticking",
+                airsoft_v2::app::search_and_destroy::Stage::Exploded => "exploded",
+                airsoft_v2::app::search_and_destroy::Stage::Disarming => "disarming",
+                airsoft_v2::app::search_and_destroy::Stage::Disarmed => "disarmed",
+            };
+            game_state::update_search_and_destroy_state(
+                sad.time_left,
+                stage,
+                sad.current_code.len() as u8,
+                sad.wants_game_tick,
+            ).await;
+        }
 
         // Dont trigger game tick events if the app doesn't need them
         let commands = current_app.render();
@@ -285,7 +320,6 @@ async fn main(spawner: Spawner) {
                 Command::Noop => {}
             }
         }
-
 
         let event = event_bus.event_receiver.receive().await;
         current_app.handle_event(event);

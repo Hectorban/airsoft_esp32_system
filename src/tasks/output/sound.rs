@@ -1,7 +1,7 @@
 use embassy_sync::channel::{Channel, Receiver};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::Duration;
-use esp_hal_buzzer::ToneValue;
+use esp_hal_buzzer::{notes::*, song, Buzzer, ToneValue};
 
 #[derive(Clone)]
 pub enum SoundCommand {
@@ -11,11 +11,56 @@ pub enum SoundCommand {
     DoubleBeep,
     ErrorBeep,
     SuccessBeep,
+    VictorySound,
+    DefeatSound,
     Stop,
 }
 
 pub const SOUND_QUEUE_SIZE: usize = 16;
 pub type SoundChannel = Channel<NoopRawMutex, SoundCommand, { SOUND_QUEUE_SIZE }>;
+
+pub const VICTORY_SONG: [ToneValue; 23] = song!(
+    200,
+    [
+        (NOTE_G4, SIXTEENTH_NOTE),
+        (NOTE_C5, SIXTEENTH_NOTE),
+        (NOTE_E5, SIXTEENTH_NOTE),
+        (NOTE_G5, SIXTEENTH_NOTE),
+        (NOTE_C6, SIXTEENTH_NOTE),
+        (NOTE_E6, SIXTEENTH_NOTE),
+        (NOTE_G6, HALF_NOTE),
+        (NOTE_E6, HALF_NOTE),
+        (NOTE_GS4, SIXTEENTH_NOTE),
+        (NOTE_C5, SIXTEENTH_NOTE),
+        (NOTE_DS5, SIXTEENTH_NOTE),
+        (NOTE_GS5, SIXTEENTH_NOTE),
+        (NOTE_C6, SIXTEENTH_NOTE),
+        (NOTE_DS6, SIXTEENTH_NOTE),
+        (NOTE_GS6, HALF_NOTE),
+        (NOTE_DS6, HALF_NOTE),
+        (NOTE_AS4, SIXTEENTH_NOTE),
+        (NOTE_D5, SIXTEENTH_NOTE),
+        (NOTE_F5, SIXTEENTH_NOTE),
+        (NOTE_AS5, SIXTEENTH_NOTE),
+        (NOTE_D6, SIXTEENTH_NOTE),
+        (NOTE_F6, SIXTEENTH_NOTE),
+        (NOTE_AS6, HALF_NOTE)
+    ]
+);
+
+pub const DEFEAT_SONG: [ToneValue; 7] = song!(
+    120,
+    [
+        (NOTE_C4, EIGHTEENTH_NOTE),
+        (NOTE_G3, EIGHTEENTH_NOTE),
+        (NOTE_E3, EIGHTEENTH_NOTE),
+        (NOTE_A3, QUARTER_NOTE),
+        (NOTE_B3, QUARTER_NOTE),
+        (NOTE_A3, QUARTER_NOTE),
+        (NOTE_GS3, HALF_NOTE)
+    ]
+);
+
 
 #[embassy_executor::task]
 pub async fn sound_task(
@@ -36,6 +81,12 @@ pub async fn sound_task(
                     embassy_time::Timer::after(Duration::from_millis(10)).await; // Small gap between tones
                 }
             },
+            SoundCommand::VictorySound => {
+                let _ = buzzer.play_song(VICTORY_SONG);
+            }
+            SoundCommand::DefeatSound => {
+                let _ = buzzer.play_song(DEFEAT_SONG);
+            }
             SoundCommand::Beep => {
                 let _ = buzzer.play_tones([1000], [100]);
             },

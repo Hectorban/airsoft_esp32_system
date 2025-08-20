@@ -1,4 +1,4 @@
-use crate::{app::{search_and_destroy::SearchAndDestroy, App}, events::{Command, InputEvent}, tasks::output::{display::DisplayCommand, lights::LightsCommand, sound::SoundCommand}};
+use crate::{app::{search_and_destroy::SearchAndDestroy, App}, events::{Command, InputEvent}, tasks::output::{display::DisplayCommand, lights::LightsCommand, sound::SoundCommand}, game_state};
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::{vec, boxed::Box};
@@ -6,12 +6,12 @@ use alloc::{vec, boxed::Box};
 extern crate alloc;
 
 pub struct MainMenu {
-    current_selection: MainMenuSelection,
-    has_selected: bool,
+    pub current_selection: MainMenuSelection,
+    pub has_selected: bool,
     last_event: InputEvent,
 }
 
-enum MainMenuSelection {
+pub enum MainMenuSelection {
     SearchAndDestroy,
     TeamDeathMatch,
     Domination,
@@ -166,6 +166,10 @@ impl App for MainMenu {
         }
 
         commands
+    }
+    
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
     }
 }
     
