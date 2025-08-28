@@ -26,7 +26,7 @@ use alloc::string::ToString;
 use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
+use embassy_sync::blocking_mutex::{Mutex, raw::NoopRawMutex};
 use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use esp_hal::clock::CpuClock;
@@ -59,7 +59,7 @@ use embedded_graphics::{
 };
 use static_cell::StaticCell;
 
-use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
+use embassy_embedded_hal::shared_bus::blocking::i2c::I2cDevice;
 
 extern crate alloc;
 
