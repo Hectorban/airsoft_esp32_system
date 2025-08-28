@@ -3,6 +3,7 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Instant};
 use esp_hal::{i2c::master::I2c as EspI2c, Blocking, rom_iface::ets_delay_us};
 use defmt::info;
+use embedded_hal::i2c::I2c;
 
 type I2cType = EspI2c<'static, Blocking>;
 type SharedI2cDevice = I2cDevice<'static, NoopRawMutex, I2cType>;
