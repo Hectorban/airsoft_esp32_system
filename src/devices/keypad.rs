@@ -115,7 +115,7 @@ impl I2cKeypad {
                             // Reset all columns high
                             let _ = self.i2c.write(self.address, &[0xF0]).await;
                             info!("address: {} {}", row, col);
-                            return Some(Self::KEYPAD_KEYS_3[row][col]);
+                            return Some(Self::KEYPAD_KEYS[row][col]);
                         }
                     }
                 }

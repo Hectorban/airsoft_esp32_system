@@ -6,25 +6,20 @@
     holding buffers for the duration of a data transfer."
 )]
 
-use airsoft_v2::app::main_menu::MainMenu;
-use airsoft_v2::app::search_and_destroy::SearchAndDestroy;
 use airsoft_v2::app::App;
 use airsoft_v2::devices::buzzer::STARTUP_SOUND;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
-use airsoft_v2::events::Command;
 use airsoft_v2::events::{EventBus, EventChannel, InputEvent, TaskSenders, EVENT_QUEUE_SIZE};
 use airsoft_v2::tasks::input::{keypad::keypad_task, nfc::nfc_task};
 use airsoft_v2::tasks::internal::game_ticker_task;
-use airsoft_v2::tasks::output::display::ScrollDirection;
 use airsoft_v2::tasks::output::lights::LightsCommand;
 use airsoft_v2::tasks::output::{
-    display::{display_task, DisplayChannel, DisplayCommand},
     lights::{lights_task, LightsChannel},
     sound::{sound_task, SoundChannel, SoundCommand},
 };
 use airsoft_v2::web::{self, WebApp};
 use airsoft_v2::wifi::{dhcp_server, start_wifi};
-use airsoft_v2::{devices::keypad, mk_static, game_state};
+use airsoft_v2::{devices::keypad, game_state, mk_static};
 
 use alloc::boxed::Box;
 use alloc::string::ToString;
@@ -33,6 +28,7 @@ use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 use embassy_time::{Delay, Duration, Timer};
+use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::i2c::master::I2c;
@@ -44,13 +40,23 @@ use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{i2c, Async};
 use esp_hal_buzzer::Buzzer;
-use esp_hal_mfrc522::MFRC522;
+use mousefood::prelude::Rgb565;
+use mousefood::{EmbeddedBackend, EmbeddedBackendConfig};
+use pn532::{spi::{SPIInterface, NoIRQ}, Pn532};
+use airsoft_v2::tasks::input::nfc::EmbassyTimer;
 use esp_hal_smartled::{buffer_size, smart_led_buffer, SmartLedsAdapter};
 use esp_println as _;
 use esp_wifi::EspWifiController;
-use hd44780_driver::memory_map::MemoryMap1602;
-use hd44780_driver::non_blocking::HD44780;
-use hd44780_driver::setup::DisplayOptionsI2C;
+use ratatui::widgets::{Block, Paragraph, Wrap};
+use ratatui::{Frame, Terminal, style::*};
+use ssd1306::{prelude::*, Ssd1306, Ssd1306Async};
+use ssd1306::prelude::I2CInterface as SsdI2CInterface;
+use embedded_graphics::{
+    mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
+    pixelcolor::BinaryColor,
+    prelude::*,
+    text::{Baseline, Text},
+};
 use static_cell::StaticCell;
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
@@ -64,7 +70,7 @@ const BUFFER_SIZE: usize = buffer_size(NUM_LEDS);
 
 type I2cType = I2c<'static, esp_hal::Async>;
 
-const LCD_ADDRESS: u8 = 0x27; // or 0x3F
+const OLED_ADDRESS: u8 = 0x3C; // Standard SSD1306 I2C address
 const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 
 static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2cType>> = StaticCell::new();
@@ -72,7 +78,6 @@ static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCel
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
 static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
 static SOUND_CHANNEL: StaticCell<SoundChannel> = StaticCell::new();
-static DISPLAY_CHANNEL: StaticCell<DisplayChannel> = StaticCell::new();
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -95,16 +100,20 @@ async fn main(spawner: Spawner) {
 
     let rng = esp_hal::rng::Rng::new(peripherals.RNG);
     let timer1 = TimerGroup::new(peripherals.TIMG0);
-    let esp_wifi_ctrl = mk_static!(
-        EspWifiController<'static>,
-        esp_wifi::init(timer1.timer0, rng).unwrap()
-    );
+    //let esp_wifi_ctrl = mk_static!(
+    //    EspWifiController<'static>,
+    //    esp_wifi::init(timer1.timer0, rng).unwrap()
+    //);
 
-    info!("Attempting to start wifi..");
-    let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
-        .await
-        .expect("Failed to start wifi");
+    //info!("Attempting to start wifi..");
+    //let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
+    //    .await
+    //    .expect("Failed to start wifi");
 
+    //let webapp = WebApp::default();
+    //spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
+    //spawner.must_spawn(dhcp_server(stack));
+    //info!("Web server started!");
 
     // TODO Abstract spawning of devices
 
@@ -119,26 +128,6 @@ async fn main(spawner: Spawner) {
     .into_async();
     let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
-    let lcd_i2c = I2cDevice::new(i2c_bus);
-    let mut options =
-        DisplayOptionsI2C::new(MemoryMap1602::new()).with_i2c_bus(lcd_i2c, LCD_ADDRESS);
-
-    let display = loop {
-        match HD44780::new(options, &mut Delay).await {
-            Err((options_back, error)) => {
-                error!(
-                    "Error creating LCD Driver: {:?}",
-                    defmt::Debug2Format(&error)
-                );
-                options = options_back;
-                Timer::after(Duration::from_millis(100)).await;
-            }
-            Ok(display) => break display,
-        }
-    };
-
-    let display_channel = DISPLAY_CHANNEL.init(DisplayChannel::new());
-    spawner.must_spawn(display_task(display_channel.receiver(), display));
 
     info!("Connecting to neopixel strips..");
     // Initialize NeoPixels
@@ -184,7 +173,6 @@ async fn main(spawner: Spawner) {
 
     // Create task senders
     let task_senders = TaskSenders {
-        display: display_channel.sender(),
         lights: lights_channel.sender(),
         sound: sound_channel.sender(),
     };
@@ -206,15 +194,6 @@ async fn main(spawner: Spawner) {
             duration_ms: 100,
         })
         .await;
-    task_senders
-        .display
-        .send(DisplayCommand::ScrollText {
-            text: "Airsoft".to_string(),
-            col: 0,
-            times: 2,
-            direction: ScrollDirection::Right,
-        })
-        .await;
 
     // give time for the animation to finish
     Timer::after(Duration::from_secs(4)).await;
@@ -231,97 +210,83 @@ async fn main(spawner: Spawner) {
     )
     .unwrap()
     .with_sck(peripherals.GPIO18)
-    .with_mosi(peripherals.GPIO23)
     .with_miso(peripherals.GPIO19)
+    .with_mosi(peripherals.GPIO23)
     .into_async();
 
     let cs = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
     let spi_device = SpiDevice::new(spi_bus, cs);
 
-    let mfrc522 = MFRC522::new(spi_device, || embassy_time::Instant::now().as_ticks());
+    let mut pn532 = Pn532::new(
+        SPIInterface {
+            spi: spi_device,
+            irq: None::<NoIRQ>,
+        },
+        EmbassyTimer,
+    );
 
     // Spawn input tasks
     spawner.must_spawn(keypad_task(keypad, event_bus.event_sender));
-    spawner.must_spawn(nfc_task(mfrc522, event_bus.event_sender));
+    spawner.must_spawn(nfc_task(pn532, event_bus.event_sender));
 
     // Spawn game ticker task
     spawner.must_spawn(game_ticker_task(event_bus.event_sender));
 
     info!("All Side tasks spawned!");
-    
-    // Initialize shared game state for web API
+
+    // Initialize shared game state for web AP
     game_state::init_game_state();
     info!("Game state initialized!");
-    
-    // Start web server and DHCP server after game state is initialized
-    let webapp = WebApp::default();
-    spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
-    spawner.must_spawn(dhcp_server(stack));
-    info!("Web server started!");
-    
+
     // Keep main task alive
     info!("Initiating main task loop");
 
-    let mut current_app: Box<dyn App> = Box::new(MainMenu::default());
+    let mut display= loop {
+        let oled_i2c = I2cDevice::new(i2c_bus);
+        let interface = SsdI2CInterface::new(oled_i2c, OLED_ADDRESS, 0x40);
+
+        let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+            .into_buffered_graphics_mode();
+
+        match display.init() {
+            Err(error) => {
+                error!(
+                    "Error creating OLED Driver: {:?}",
+                    defmt::Debug2Format(&error)
+                );
+                Timer::after(Duration::from_millis(100)).await;
+            }
+            Ok(()) => break display,
+        }
+    };
+
+    let config = EmbeddedBackendConfig {
+        flush_callback: Box::new(
+            move |d: &mut Ssd1306<
+                I2CInterface<I2c<'_, esp_hal::Blocking>>,
+                DisplaySize128x64,
+                ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>,
+            >| {
+                d.flush().unwrap();
+            },
+        ),
+        ..Default::default()
+    };
+
+    let backend = EmbeddedBackend::new(&mut display, config);
+    let mut terminal = Terminal::new(backend).unwrap();
 
     loop {
-        // TODO we can make this follow a state machine pattern or component pattern to make it more extensible
-        // We only need to figure out sound and future output devices like servos, etc
-
-        // Update game state for web API based on current app
-        // This is a bit of a hack since we need to check the concrete type
-        if let Some(main_menu) = current_app.as_any().downcast_ref::<MainMenu>() {
-            let selection = match main_menu.current_selection {
-                airsoft_v2::app::main_menu::MainMenuSelection::SearchAndDestroy => "search_and_destroy",
-                airsoft_v2::app::main_menu::MainMenuSelection::TeamDeathMatch => "team_death_match",
-                airsoft_v2::app::main_menu::MainMenuSelection::Domination => "domination",
-                airsoft_v2::app::main_menu::MainMenuSelection::Cashout => "cashout",
-                airsoft_v2::app::main_menu::MainMenuSelection::Config => "config",
-            };
-            game_state::update_main_menu_state(selection, main_menu.has_selected).await;
-        } else if let Some(sad) = current_app.as_any().downcast_ref::<SearchAndDestroy>() {
-            let stage = match sad.stage {
-                airsoft_v2::app::search_and_destroy::Stage::WaitingForArm => "waiting_for_arm",
-                airsoft_v2::app::search_and_destroy::Stage::Arming => "arming",
-                airsoft_v2::app::search_and_destroy::Stage::Armed => "armed",
-                airsoft_v2::app::search_and_destroy::Stage::Ticking => "ticking",
-                airsoft_v2::app::search_and_destroy::Stage::Exploded => "exploded",
-                airsoft_v2::app::search_and_destroy::Stage::Disarming => "disarming",
-                airsoft_v2::app::search_and_destroy::Stage::Disarmed => "disarmed",
-            };
-            game_state::update_search_and_destroy_state(
-                sad.time_left,
-                stage,
-                sad.current_code.len() as u8,
-                sad.wants_game_tick,
-            ).await;
-        }
-
-        // Dont trigger game tick events if the app doesn't need them
-        let commands = current_app.render();
-        for command in commands {
-            match command {
-                Command::DisplayText(display_command) => {
-                    task_senders.display.send(display_command).await;
-                }
-                Command::Lights(lights_command) => {
-                    task_senders.lights.send(lights_command).await;
-                }
-                Command::Sound(sound_command) => {
-                    task_senders.sound.send(sound_command).await;
-                }
-                Command::ChangeApp(app) => {
-                    current_app = app;
-                    // Send a None event to the app to trigger the first render
-                    // This is a bit of a hack, but it works
-                    event_bus.event_sender.send(InputEvent::None).await;
-                }
-                Command::Noop => {}
-            }
-        }
-
-        let event = event_bus.event_receiver.receive().await;
-        current_app.handle_event(event);
+        terminal.draw(draw).unwrap();
     }
+}
+
+fn draw(frame: &mut Frame) {
+    let text = "Ratatui on embedded devices!";
+    let paragraph = Paragraph::new(text.dark_gray()).wrap(Wrap { trim: true });
+    let bordered_block = Block::bordered()
+        .border_style(Style::new().yellow())
+        .title("Mousefood");
+    frame.render_widget(paragraph.block(bordered_block), frame.area());
 }
