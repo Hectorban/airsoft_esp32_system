@@ -11,7 +11,7 @@ pub async fn keypad_task(
     event_sender: Sender<'static, NoopRawMutex, InputEvent, {EVENT_QUEUE_SIZE}>,
 ) {
     loop {
-        if let Some(key) = keypad.scan().await {
+        if let Some(key) = keypad.scan() {
             info!("Key pressed: {}", key);
             let event = match key {
                 'A' | 'a' => InputEvent::LetterA,

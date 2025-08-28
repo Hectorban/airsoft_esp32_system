@@ -38,7 +38,7 @@ use esp_hal::spi;
 use esp_hal::spi::master::Spi;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
-use esp_hal::{i2c, Async};
+use esp_hal::{i2c, Blocking};
 use esp_hal_buzzer::Buzzer;
 use mousefood::prelude::Rgb565;
 use mousefood::{EmbeddedBackend, EmbeddedBackendConfig};
@@ -68,7 +68,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 const NUM_LEDS: usize = 9;
 const BUFFER_SIZE: usize = buffer_size(NUM_LEDS);
 
-type I2cType = I2c<'static, esp_hal::Async>;
+type I2cType = I2c<'static, esp_hal::Blocking>;
 
 const OLED_ADDRESS: u8 = 0x3C; // Standard SSD1306 I2C address
 const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
@@ -124,8 +124,7 @@ async fn main(spawner: Spawner) {
     )
     .unwrap()
     .with_sda(peripherals.GPIO21)
-    .with_scl(peripherals.GPIO22)
-    .into_async();
+    .with_scl(peripherals.GPIO22);
     let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
 
 
@@ -263,11 +262,7 @@ async fn main(spawner: Spawner) {
 
     let config = EmbeddedBackendConfig {
         flush_callback: Box::new(
-            move |d: &mut Ssd1306<
-                I2CInterface<I2c<'_, esp_hal::Blocking>>,
-                DisplaySize128x64,
-                ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>,
-            >| {
+            move |d| {
                 d.flush().unwrap();
             },
         ),

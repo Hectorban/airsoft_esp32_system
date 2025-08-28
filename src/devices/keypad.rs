@@ -1,11 +1,10 @@
-use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
+use embassy_embedded_hal::shared_bus::blocking::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_time::{Duration, Timer, Instant};
-use embedded_hal_async::i2c::I2c;
-use esp_hal::{i2c::master::I2c as EspI2c, Async};
+use embassy_time::{Duration, Instant};
+use esp_hal::{i2c::master::I2c as EspI2c, Blocking, rom_iface::ets_delay_us};
 use defmt::info;
 
-type I2cType = EspI2c<'static, Async>;
+type I2cType = EspI2c<'static, Blocking>;
 type SharedI2cDevice = I2cDevice<'static, NoopRawMutex, I2cType>;
 
 pub struct I2cKeypad {
@@ -53,8 +52,8 @@ impl I2cKeypad {
         self
     }
 
-    pub async fn scan(&mut self) -> Option<char> {
-        let current_key = self.scan_raw().await;
+    pub fn scan(&mut self) -> Option<char> {
+        let current_key = self.scan_raw();
         let now = Instant::now();
 
         match (current_key, self.last_key) {
@@ -88,19 +87,19 @@ impl I2cKeypad {
         }
     }
 
-    async fn scan_raw(&mut self) -> Option<char> {
+    fn scan_raw(&mut self) -> Option<char> {
         for col in 0..4 {
             // Set column low, others high
             let col_mask = !(1 << (col + 4));
-            if let Err(_) = self.i2c.write(self.address, &[col_mask]).await {
+            if let Err(_) = self.i2c.write(self.address, &[col_mask]) {
                 // I2C write failed, skip this column
                 continue;
             }
-            Timer::after(Duration::from_micros(10)).await;
+            ets_delay_us(10);
 
             // Read rows
             let mut buf = [0u8];
-            match self.i2c.read(self.address, &mut buf).await {
+            match self.i2c.read(self.address, &mut buf) {
                 Ok(_) => {
                     let rows = buf[0] & 0x0F;
                     
@@ -113,7 +112,7 @@ impl I2cKeypad {
                     for row in 0..4 {
                         if rows & (1 << row) == 0 {
                             // Reset all columns high
-                            let _ = self.i2c.write(self.address, &[0xF0]).await;
+                            let _ = self.i2c.write(self.address, &[0xF0]);
                             info!("address: {} {}", row, col);
                             return Some(Self::KEYPAD_KEYS[row][col]);
                         }
@@ -127,7 +126,7 @@ impl I2cKeypad {
         }
 
         // Reset all columns high
-        let _ = self.i2c.write(self.address, &[0xF0]).await;
+        let _ = self.i2c.write(self.address, &[0xF0]);
         None
     }
 }
