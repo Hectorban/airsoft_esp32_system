@@ -6,15 +6,12 @@
     holding buffers for the duration of a data transfer."
 )]
 
-use airsoft_v2::devices::buzzer::STARTUP_SOUND;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
 use airsoft_v2::events::{EventBus, EventChannel, TaskSenders};
 use airsoft_v2::tasks::input::{keypad::keypad_task, nfc::nfc_task};
-use airsoft_v2::tasks::internal::game_ticker_task;
-use airsoft_v2::tasks::output::lights::LightsCommand;
 use airsoft_v2::tasks::output::{
     lights::{lights_task, LightsChannel},
-    sound::{sound_task, SoundChannel, SoundCommand},
+    sound::{sound_task, SoundChannel},
 };
 use airsoft_v2::tasks::web::{self, WebApp};
 use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
@@ -60,7 +57,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 const NUM_LEDS: usize = 9;
 const BUFFER_SIZE: usize = buffer_size(NUM_LEDS);
 
-type I2cType = I2c<'static, esp_hal::Blocking>;
+pub type I2cType = I2c<'static, esp_hal::Blocking>;
 
 const OLED_ADDRESS: u8 = 0x3C; // Standard SSD1306 I2C address
 const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
@@ -83,27 +80,27 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(timer0.timer0);
     info!("Embassy initialized!");
 
-    let rng = esp_hal::rng::Rng::new(peripherals.RNG);
-    let timer1 = TimerGroup::new(peripherals.TIMG0);
-    let esp_wifi_ctrl = mk_static!(
-        EspWifiController<'static>,
-        esp_wifi::init(timer1.timer0, rng).unwrap()
-    );
+   // let rng = esp_hal::rng::Rng::new(peripherals.RNG);
+   // let timer1 = TimerGroup::new(peripherals.TIMG0);
+   // let esp_wifi_ctrl = mk_static!(
+   //     EspWifiController<'static>,
+   //     esp_wifi::init(timer1.timer0, rng).unwrap()
+   // );
 
-    info!("Attempting to start wifi..");
-    let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
-        .await
-        .expect("Failed to start wifi");
+   // info!("Attempting to start wifi..");
+   // let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
+   //     .await
+   //     .expect("Failed to start wifi");
 
-    let webapp = WebApp::default();
-    spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
-    spawner.must_spawn(dhcp_server(stack));
+   // let webapp = WebApp::default();
+   // spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
+   // spawner.must_spawn(dhcp_server(stack));
 
-    info!("Web server started!");
+   // info!("Web server started!");
 
     let i2c = I2c::new(
         peripherals.I2C0,
-        i2c::master::Config::default().with_frequency(Rate::from_khz(100)),
+        i2c::master::Config::default().with_frequency(Rate::from_khz(400)),
     )
     .unwrap()
     .with_sda(peripherals.GPIO21)
@@ -196,6 +193,7 @@ async fn main(spawner: Spawner) {
             Ok(()) => break display,
         }
     };
+    airsoft_v2::graphics::boot_animation(&mut display).await;
 
     let config = EmbeddedBackendConfig {
         flush_callback: Box::new(
@@ -211,7 +209,7 @@ async fn main(spawner: Spawner) {
     };
 
     let backend = EmbeddedBackend::new(&mut display, config);
-    let mut terminal = Terminal::new(backend).unwrap();
+    let mut terminal: Terminal<EmbeddedBackend<'_, Ssd1306<I2CInterface<I2cDevice<'_, NoopRawMutex, I2c<'static, esp_hal::Blocking>>>, DisplaySize128x64, ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>>, embedded_graphics::pixelcolor::BinaryColor>> = Terminal::new(backend).unwrap();
 
     info!("Initiating main task loop");
 

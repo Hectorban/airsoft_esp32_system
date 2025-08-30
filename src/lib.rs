@@ -6,6 +6,7 @@ pub mod events;
 pub mod tasks;
 pub mod app;
 pub mod game_state;
+pub mod graphics;
 
 #[macro_export]
 macro_rules! mk_static {

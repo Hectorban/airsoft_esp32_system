@@ -89,7 +89,6 @@ pub type EventChannel = Channel<NoopRawMutex, InputEvent, { EVENT_QUEUE_SIZE }>;
 pub enum Command {
     Lights(lights::LightsCommand),
     Sound(sound::SoundCommand),
-    ChangeApp(Box<dyn App>),
     Noop
 }
 
