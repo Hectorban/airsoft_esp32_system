@@ -6,10 +6,9 @@
     holding buffers for the duration of a data transfer."
 )]
 
-use airsoft_v2::app::App;
 use airsoft_v2::devices::buzzer::STARTUP_SOUND;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
-use airsoft_v2::events::{EventBus, EventChannel, InputEvent, TaskSenders, EVENT_QUEUE_SIZE};
+use airsoft_v2::events::{EventBus, EventChannel, TaskSenders};
 use airsoft_v2::tasks::input::{keypad::keypad_task, nfc::nfc_task};
 use airsoft_v2::tasks::internal::game_ticker_task;
 use airsoft_v2::tasks::output::lights::LightsCommand;
@@ -22,15 +21,13 @@ use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
 use airsoft_v2::{devices::keypad, game_state, mk_static};
 
 use alloc::boxed::Box;
-use alloc::string::ToString;
 use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::{Mutex as BlockingMutex, raw::NoopRawMutex};
 use embassy_sync::mutex::Mutex;
 use core::cell::RefCell;
-use embassy_time::{Delay, Duration, Timer};
-use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
+use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::i2c::master::I2c;
@@ -40,9 +37,8 @@ use esp_hal::spi;
 use esp_hal::spi::master::Spi;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
-use esp_hal::{i2c, Blocking, Async};
+use esp_hal::{i2c, Async};
 use esp_hal_buzzer::Buzzer;
-use mousefood::prelude::Rgb565;
 use mousefood::{EmbeddedBackend, EmbeddedBackendConfig};
 use pn532::{spi::{SPIInterface, NoIRQ}, Pn532};
 use airsoft_v2::tasks::input::nfc::EmbassyTimer;
@@ -51,14 +47,8 @@ use esp_println as _;
 use esp_wifi::EspWifiController;
 use ratatui::widgets::{Block, Paragraph, Wrap};
 use ratatui::{Frame, Terminal, style::*};
-use ssd1306::{prelude::*, Ssd1306, Ssd1306Async};
+use ssd1306::{prelude::*, Ssd1306};
 use ssd1306::prelude::I2CInterface as SsdI2CInterface;
-use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
-    pixelcolor::BinaryColor,
-
-    text::{Baseline, Text},
-};
 use static_cell::StaticCell;
 
 use embassy_embedded_hal::shared_bus::blocking::i2c::I2cDevice;
@@ -80,11 +70,6 @@ static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCel
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
 static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
 static SOUND_CHANNEL: StaticCell<SoundChannel> = StaticCell::new();
-
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -219,7 +204,7 @@ async fn main(spawner: Spawner) {
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
     let spi_device = SpiDevice::new(spi_bus, cs);
 
-    let mut pn532 = Pn532::new(
+    let pn532 = Pn532::new(
         SPIInterface {
             spi: spi_device,
             irq: None::<NoIRQ>,

@@ -1,7 +1,7 @@
 use embassy_sync::channel::{Channel, Receiver};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::Duration;
-use esp_hal_buzzer::{notes::*, song, Buzzer, ToneValue};
+use esp_hal_buzzer::{notes::*, song, ToneValue};
 
 #[derive(Clone)]
 pub enum SoundCommand {

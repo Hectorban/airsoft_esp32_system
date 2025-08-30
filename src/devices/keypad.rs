@@ -92,7 +92,7 @@ impl I2cKeypad {
         for col in 0..4 {
             // Set column low, others high
             let col_mask = !(1 << (col + 4));
-            if let Err(_) = self.i2c.write(self.address, &[col_mask]) {
+            if self.i2c.write(self.address, &[col_mask]).is_err() {
                 // I2C write failed, skip this column
                 continue;
             }

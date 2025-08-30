@@ -1,7 +1,6 @@
-use defmt::{error, info, println};
+use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use esp_hal::gpio::Output;
 use esp_hal::spi::master::Spi;
@@ -76,7 +75,7 @@ pub async fn nfc_task(
                 info!("Raw response length: {}, data: {:?}", response.len(), defmt::Debug2Format(&response));
                 
                 // Check if we have a valid response
-                if response.len() >= 1 {
+                if !response.is_empty() {
                     let num_targets = response[0];
                     info!("Number of targets found: {}", num_targets);
                     

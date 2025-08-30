@@ -1,9 +1,8 @@
 use embassy_net::Stack;
 use embassy_time::Duration;
-use picoserve::{response::File, routing, AppBuilder, AppRouter, Router, extract::State, response::Json};
+use picoserve::{response::File, routing, AppBuilder, AppRouter, Router, response::Json};
 use crate::game_state;
 extern crate alloc;
-use alloc::string::String;
 
 pub struct Application;
 

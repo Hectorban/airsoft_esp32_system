@@ -3,13 +3,12 @@ use core::str::FromStr;
 use defmt::{info, error};
 use embassy_net::StaticConfigV4;
 use embassy_net::Ipv4Cidr;
-use anyhow::{Result, anyhow};
+use anyhow::anyhow;
 
 use embassy_executor::Spawner;
-use embassy_net::{DhcpConfig, Runner, Stack, StackResources};
+use embassy_net::{Runner, Stack, StackResources};
 use embassy_time::{Duration, Timer};
 use esp_hal::rng::Rng;
-use esp_hal_dhcp_server::simple_leaser::SimpleDhcpLeaser;
 use esp_hal_dhcp_server::simple_leaser::SingleDhcpLeaser;
 use esp_hal_dhcp_server::structs::DhcpServerConfig;
 use esp_wifi::{
@@ -35,7 +34,7 @@ pub async fn start_wifi(
     mut rng: Rng,
     spawner: &Spawner,
 ) -> anyhow::Result<Stack<'static>> {
-    let (controller, interfaces) = esp_wifi::wifi::new(&esp_wifi_ctrl, wifi).unwrap();
+    let (controller, interfaces) = esp_wifi::wifi::new(esp_wifi_ctrl, wifi).unwrap();
     let wifi_interface = interfaces.ap;
     let net_seed = rng.random() as u64 | ((rng.random() as u64) << 32);
 
@@ -100,18 +99,15 @@ async fn connection_task(mut controller: WifiController<'static>) {
     info!("start connection task");
     loop {
         info!("loop start");
-        match esp_wifi::wifi::wifi_state() {
-            WifiState::ApStarted => {
-                // wait until we're no longer connected
-                controller.wait_for_event(WifiEvent::ApStop).await;
-                Timer::after(Duration::from_millis(5000)).await
-            }
-            _ => {}
+        if esp_wifi::wifi::wifi_state() == WifiState::ApStarted {
+            // wait until we're no longer connected
+            controller.wait_for_event(WifiEvent::ApStop).await;
+            Timer::after(Duration::from_millis(5000)).await
         }
         if !matches!(controller.is_started(), Ok(true)) {
             let client_config = wifi::Configuration::AccessPoint(wifi::AccessPointConfiguration {
-                ssid: SSID.try_into().unwrap(),
-                password: PASSWORD.try_into().unwrap(), // Set your password
+                ssid: SSID.into(),
+                password: PASSWORD.into(), // Set your password
                 auth_method: esp_wifi::wifi::AuthMethod::WPA2Personal,
                 ..Default::default()
             });
