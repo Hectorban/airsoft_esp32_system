@@ -17,8 +17,8 @@ use airsoft_v2::tasks::output::{
     lights::{lights_task, LightsChannel},
     sound::{sound_task, SoundChannel, SoundCommand},
 };
-use airsoft_v2::web::{self, WebApp};
-use airsoft_v2::wifi::{dhcp_server, start_wifi};
+use airsoft_v2::tasks::web::{self, WebApp};
+use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
 use airsoft_v2::{devices::keypad, game_state, mk_static};
 
 use alloc::boxed::Box;

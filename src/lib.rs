@@ -2,8 +2,6 @@
 #![feature(impl_trait_in_assoc_type)]
 
 pub mod devices;
-pub mod wifi;
-pub mod web;
 pub mod events;
 pub mod tasks;
 pub mod app;
