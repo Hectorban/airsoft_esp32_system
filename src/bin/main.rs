@@ -77,12 +77,10 @@ async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(config);
 
     esp_alloc::heap_allocator!(size: 64 * 1024);
-    // COEX needs more RAM - so we've added some more
-    esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024);
+    //esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024); 
 
     let timer0 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timer0.timer0);
-
     info!("Embassy initialized!");
 
     let rng = esp_hal::rng::Rng::new(peripherals.RNG);
@@ -100,11 +98,9 @@ async fn main(spawner: Spawner) {
     let webapp = WebApp::default();
     spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
     spawner.must_spawn(dhcp_server(stack));
+
     info!("Web server started!");
 
-    // TODO Abstract spawning of devices
-
-    info!("Attempting to start I2C bus..");
     let i2c = I2c::new(
         peripherals.I2C0,
         i2c::master::Config::default().with_frequency(Rate::from_khz(100)),
@@ -114,35 +110,22 @@ async fn main(spawner: Spawner) {
     .with_scl(peripherals.GPIO22);
     let i2c_bus = I2C_BUS.init(BlockingMutex::new(RefCell::new(i2c)));
 
-
-    info!("Connecting to neopixel strips..");
-    // Initialize NeoPixels
     let rmt = Rmt::new(peripherals.RMT, Rate::from_mhz(80)).unwrap();
     let buffer1 = smart_led_buffer!(NUM_LEDS);
-    let buffer2 = smart_led_buffer!(NUM_LEDS);
 
-    let mut led_strip1 = NeoPixelStrip::<0, BUFFER_SIZE>::new(
+    let mut led_strip = NeoPixelStrip::<0, BUFFER_SIZE>::new(
         SmartLedsAdapter::new(rmt.channel0, peripherals.GPIO4, buffer1),
         NUM_LEDS,
     );
-    let mut led_strip2 = NeoPixelStrip::<1, BUFFER_SIZE>::new(
-        SmartLedsAdapter::new(rmt.channel1, peripherals.GPIO2, buffer2),
-        NUM_LEDS,
-    );
-
-    let _ = led_strip1.off_all();
-    let _ = led_strip2.off_all();
-
-    let ledc = mk_static!(Ledc, Ledc::new(peripherals.LEDC));
-    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
 
     let lights_channel = LIGHTS_CHANNEL.init(LightsChannel::new());
     spawner.must_spawn(lights_task(
         lights_channel.receiver(),
-        led_strip1,
-        led_strip2,
+        led_strip,
     ));
 
+    let ledc = mk_static!(Ledc, Ledc::new(peripherals.LEDC));
+    ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
     let buzzer = Buzzer::new(
         ledc,
         timer::Number::Timer0,
@@ -153,38 +136,14 @@ async fn main(spawner: Spawner) {
     let sound_channel = SOUND_CHANNEL.init(SoundChannel::new());
     spawner.must_spawn(sound_task(buzzer, sound_channel.receiver()));
 
-    // Initialize event bus
     let event_channel = EVENT_CHANNEL.init(EventChannel::new());
     let event_bus = EventBus::new(event_channel);
 
-    // Create task senders
     let task_senders = TaskSenders {
         lights: lights_channel.sender(),
         sound: sound_channel.sender(),
     };
 
-    // Play startup sound and show initial display before spawning tasks
-    task_senders
-        .sound
-        .send(SoundCommand::PlaySong {
-            song: &STARTUP_SOUND,
-        })
-        .await;
-
-    task_senders
-        .lights
-        .send(LightsCommand::Flash {
-            r: 255,
-            g: 255,
-            b: 255,
-            duration_ms: 100,
-        })
-        .await;
-
-    // give time for the animation to finish
-    Timer::after(Duration::from_secs(4)).await;
-
-    // Connect to inputs
     let keypad_i2c = I2cDevice::new(i2c_bus);
     let keypad = keypad::I2cKeypad::new(KEYPAD_ADDRESS, keypad_i2c);
 
@@ -216,17 +175,8 @@ async fn main(spawner: Spawner) {
     spawner.must_spawn(keypad_task(keypad, event_bus.event_sender));
     spawner.must_spawn(nfc_task(pn532, event_bus.event_sender));
 
-    // Spawn game ticker task
-    spawner.must_spawn(game_ticker_task(event_bus.event_sender));
-
-    info!("All Side tasks spawned!");
-
-    // Initialize shared game state for web AP
     game_state::init_game_state();
     info!("Game state initialized!");
-
-    // Keep main task alive
-    info!("Initiating main task loop");
 
     let mut display= loop {
         let oled_i2c = I2cDevice::new(i2c_bus);
@@ -262,6 +212,8 @@ async fn main(spawner: Spawner) {
 
     let backend = EmbeddedBackend::new(&mut display, config);
     let mut terminal = Terminal::new(backend).unwrap();
+
+    info!("Initiating main task loop");
 
     loop {
         terminal.draw(draw).unwrap();
