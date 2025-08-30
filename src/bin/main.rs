@@ -59,6 +59,12 @@ const BUFFER_SIZE: usize = buffer_size(NUM_LEDS);
 
 pub type I2cType = I2c<'static, esp_hal::Blocking>;
 
+pub type OledDisplayType<'a> = Ssd1306<
+    SsdI2CInterface<I2cDevice<'a, NoopRawMutex, I2cType>>,
+    DisplaySize128x64,
+    ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>,
+>;
+
 const OLED_ADDRESS: u8 = 0x3C; // Standard SSD1306 I2C address
 const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 
@@ -67,6 +73,7 @@ static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCel
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
 static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
 static SOUND_CHANNEL: StaticCell<SoundChannel> = StaticCell::new();
+static DISPLAY: StaticCell<OledDisplayType<'static>> = StaticCell::new();
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -175,7 +182,7 @@ async fn main(spawner: Spawner) {
     game_state::init_game_state();
     info!("Game state initialized!");
 
-    let mut display= loop {
+    let display_temp = loop {
         let oled_i2c = I2cDevice::new(i2c_bus);
         let interface = SsdI2CInterface::new(oled_i2c, OLED_ADDRESS, 0x40);
 
@@ -193,23 +200,18 @@ async fn main(spawner: Spawner) {
             Ok(()) => break display,
         }
     };
-    airsoft_v2::graphics::boot_animation(&mut display).await;
+    let display = DISPLAY.init(display_temp);
+    airsoft_v2::graphics::boot_animation(display).await;
 
     let config = EmbeddedBackendConfig {
-        flush_callback: Box::new(
-            move |d: &mut Ssd1306<
-                I2CInterface<I2cDevice<'_, NoopRawMutex, I2cType>>,
-                DisplaySize128x64,
-                ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>,
-            >| {
-                d.flush().unwrap();
-            },
-        ),
+        flush_callback: Box::new(move |d: &mut OledDisplayType<'_>| {
+            d.flush().unwrap();
+        }),
         ..Default::default()
     };
 
-    let backend = EmbeddedBackend::new(&mut display, config);
-    let mut terminal: Terminal<EmbeddedBackend<'_, Ssd1306<I2CInterface<I2cDevice<'_, NoopRawMutex, I2c<'static, esp_hal::Blocking>>>, DisplaySize128x64, ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>>, embedded_graphics::pixelcolor::BinaryColor>> = Terminal::new(backend).unwrap();
+    let backend = EmbeddedBackend::new(display, config);
+    let mut terminal = Terminal::new(backend).unwrap();
 
     info!("Initiating main task loop");
 

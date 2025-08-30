@@ -1,13 +1,23 @@
 use anyhow::Result;
 use embassy_embedded_hal::shared_bus::blocking::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embedded_graphics::prelude::{DrawTarget, PixelColor};
+use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::prelude::DrawTarget;
 use esp_hal::i2c::master::I2c;
 use mousefood::EmbeddedBackend;
 use ratatui::{Frame, Terminal};
-use ssd1306::{prelude::I2CInterface, size::DisplaySize128x64, Ssd1306};
+use ssd1306::{
+    mode::BufferedGraphicsMode, prelude::I2CInterface, size::DisplaySize128x64, Ssd1306,
+};
 
 pub type I2cType = I2c<'static, esp_hal::Blocking>;
+
+pub type DisplayType<'a> =
+    Ssd1306<I2CInterface<I2cDevice<'a, NoopRawMutex, I2cType>>, DisplaySize128x64, BufferedGraphicsMode<DisplaySize128x64>>;
+
+pub type BackendType<'a> = EmbeddedBackend<'a, DisplayType<'a>, BinaryColor>;
+
+pub type TerminalType<'a> = Terminal<BackendType<'a>>;
 
 extern crate alloc;
 pub mod main_menu;
@@ -21,20 +31,7 @@ pub struct App {
 
 impl App {
     /// runs the application's main loop until the user quits
-    pub fn run<'display, D, C>(
-        &mut self,
-        terminal: &mut Terminal<
-            EmbeddedBackend<
-                '_,
-                Ssd1306<
-                I2CInterface<I2cDevice<'_, NoopRawMutex, I2cType>>,
-                DisplaySize128x64,
-                ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>,
-            >,
-                embedded_graphics::pixelcolor::BinaryColor,
-            >,
-        >,
-    ) -> Result<()> {
+    pub fn run(&mut self, terminal: &mut TerminalType<'static>) -> Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
