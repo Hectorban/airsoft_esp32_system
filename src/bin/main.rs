@@ -26,7 +26,9 @@ use alloc::string::ToString;
 use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::{Mutex, raw::NoopRawMutex};
+use embassy_sync::blocking_mutex::{Mutex as BlockingMutex, raw::NoopRawMutex};
+use embassy_sync::mutex::Mutex;
+use core::cell::RefCell;
 use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use esp_hal::clock::CpuClock;
@@ -38,7 +40,7 @@ use esp_hal::spi;
 use esp_hal::spi::master::Spi;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
-use esp_hal::{i2c, Blocking};
+use esp_hal::{i2c, Blocking, Async};
 use esp_hal_buzzer::Buzzer;
 use mousefood::prelude::Rgb565;
 use mousefood::{EmbeddedBackend, EmbeddedBackendConfig};
@@ -54,7 +56,7 @@ use ssd1306::prelude::I2CInterface as SsdI2CInterface;
 use embedded_graphics::{
     mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
     pixelcolor::BinaryColor,
-    prelude::*,
+
     text::{Baseline, Text},
 };
 use static_cell::StaticCell;
@@ -73,7 +75,7 @@ type I2cType = I2c<'static, esp_hal::Blocking>;
 const OLED_ADDRESS: u8 = 0x3C; // Standard SSD1306 I2C address
 const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 
-static I2C_BUS: StaticCell<Mutex<NoopRawMutex, I2cType>> = StaticCell::new();
+static I2C_BUS: StaticCell<BlockingMutex<NoopRawMutex, RefCell<I2cType>>> = StaticCell::new();
 static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCell::new();
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
 static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
@@ -100,20 +102,20 @@ async fn main(spawner: Spawner) {
 
     let rng = esp_hal::rng::Rng::new(peripherals.RNG);
     let timer1 = TimerGroup::new(peripherals.TIMG0);
-    //let esp_wifi_ctrl = mk_static!(
-    //    EspWifiController<'static>,
-    //    esp_wifi::init(timer1.timer0, rng).unwrap()
-    //);
+    let esp_wifi_ctrl = mk_static!(
+        EspWifiController<'static>,
+        esp_wifi::init(timer1.timer0, rng).unwrap()
+    );
 
-    //info!("Attempting to start wifi..");
-    //let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
-    //    .await
-    //    .expect("Failed to start wifi");
+    info!("Attempting to start wifi..");
+    let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
+        .await
+        .expect("Failed to start wifi");
 
-    //let webapp = WebApp::default();
-    //spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
-    //spawner.must_spawn(dhcp_server(stack));
-    //info!("Web server started!");
+    let webapp = WebApp::default();
+    spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
+    spawner.must_spawn(dhcp_server(stack));
+    info!("Web server started!");
 
     // TODO Abstract spawning of devices
 
@@ -125,7 +127,7 @@ async fn main(spawner: Spawner) {
     .unwrap()
     .with_sda(peripherals.GPIO21)
     .with_scl(peripherals.GPIO22);
-    let i2c_bus = I2C_BUS.init(Mutex::new(i2c));
+    let i2c_bus = I2C_BUS.init(BlockingMutex::new(RefCell::new(i2c)));
 
 
     info!("Connecting to neopixel strips..");
@@ -262,7 +264,11 @@ async fn main(spawner: Spawner) {
 
     let config = EmbeddedBackendConfig {
         flush_callback: Box::new(
-            move |d| {
+            move |d: &mut Ssd1306<
+                I2CInterface<I2cDevice<'_, NoopRawMutex, I2cType>>,
+                DisplaySize128x64,
+                ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>,
+            >| {
                 d.flush().unwrap();
             },
         ),

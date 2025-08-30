@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use crate::app::App;
-use crate::tasks::output::{display, lights, sound};
+use crate::tasks::output::{lights, sound};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use alloc::boxed::Box;
@@ -87,7 +87,6 @@ impl InputEvent {
 pub type EventChannel = Channel<NoopRawMutex, InputEvent, { EVENT_QUEUE_SIZE }>;
 
 pub enum Command {
-    DisplayText(display::DisplayCommand),
     Lights(lights::LightsCommand),
     Sound(sound::SoundCommand),
     ChangeApp(Box<dyn App>),
@@ -95,8 +94,6 @@ pub enum Command {
 }
 
 pub struct TaskSenders {
-    pub display:
-        Sender<'static, NoopRawMutex, display::DisplayCommand, { display::DISPLAY_QUEUE_SIZE }>,
     pub lights: Sender<'static, NoopRawMutex, lights::LightsCommand, { lights::LIGHTS_QUEUE_SIZE }>,
     pub sound: Sender<'static, NoopRawMutex, sound::SoundCommand, { sound::SOUND_QUEUE_SIZE }>,
 }

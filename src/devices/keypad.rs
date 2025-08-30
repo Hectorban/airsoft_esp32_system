@@ -1,7 +1,7 @@
 use embassy_embedded_hal::shared_bus::blocking::i2c::I2cDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Instant};
-use esp_hal::{i2c::master::I2c as EspI2c, Blocking, rom_iface::ets_delay_us};
+use esp_hal::{i2c::master::I2c as EspI2c, Blocking};
 use defmt::info;
 use embedded_hal::i2c::I2c;
 
@@ -96,7 +96,6 @@ impl I2cKeypad {
                 // I2C write failed, skip this column
                 continue;
             }
-            ets_delay_us(10);
 
             // Read rows
             let mut buf = [0u8];

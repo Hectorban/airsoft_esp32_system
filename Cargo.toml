@@ -1,5 +1,5 @@
 [package]
-edition      = "2021"
+edition      = "2024"
 name         = "airsoft_v2"
 rust-version = "1.86"
 version      = "0.1.0"
@@ -62,15 +62,18 @@ picoserve = { version = "0.16.0", features = ["alloc", "defmt", "embassy"] }
 smart-leds = "0.4.0"
 esp-hal-smartled = { git = "https://github.com/esp-rs/esp-hal-community.git", features = ["defmt", "esp32"] }
 embassy-sync = { version = "0.7.0", features = ["defmt"] }
-hd44780-driver = { git = "https://github.com/JohnDoneth/hd44780-driver", features = ["async"] }
+embedded-graphics = { version = "0.8.1", default-features = false }
 embedded-hal-async = "1.0.0"
 embassy-embedded-hal = { version = "0.4.0", features = ["defmt"] }
-esp-hal-mfrc522 = "0.2.1"
 esp-hal-buzzer = { version = "0.1.0", features = ["defmt", "esp32"] }
 anyhow = { version = "1.0.98", default-features = false }
 esp-hal-dhcp-server = "0.2.6"
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
-
+pn532 = {git = "https://github.com/yanshay/pn532", branch = "yanshay_async_full", default-features = false, features = ["msb-spi"]}
+ssd1306 = { version = "0.10.0", features = ["async"] }
+mousefood = { git = "https://github.com/j-g00da/mousefood", rev = "1028ac24f83920fd95a5585a85ef943901ee63ac" }
+ratatui = { version = "0.30.0-alpha.5", default-features = false }
+embedded-hal = "1.0.0"
 
 [profile.dev]
 # Rust debug is too slow.
