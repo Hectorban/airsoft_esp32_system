@@ -42,6 +42,14 @@ pub struct App {
 }
 
 impl App {
+    pub fn new(event_bus: EventBus) -> Self {
+        Self {
+            counter: 0,
+            exit: false,
+            event_bus,
+        }
+    }
+
     /// runs the application's main loop until the user quits
     pub async fn run(&mut self, terminal: &mut TerminalType<'static>) -> Result<()> {
         while !self.exit {
@@ -59,10 +67,13 @@ impl App {
         match self.event_bus.event_receiver.receive().await {
             InputEvent::KeypadEvent(key) => {
                 match key {
-                    'A' | 'a' => self.counter += 1,
-                    'B' | 'b' => self.counter -= 1,
+                    'A' | 'a' => self.counter = self.counter.wrapping_add(1),
+                    'B' | 'b' => self.counter = self.counter.wrapping_sub(1),
                     _ => {}
                 }
+            }
+            InputEvent::GameTick => {
+                self.counter = self.counter.wrapping_add(1);
             }
             _ => {}
         }

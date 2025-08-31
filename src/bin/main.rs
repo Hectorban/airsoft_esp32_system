@@ -6,6 +6,7 @@
     holding buffers for the duration of a data transfer."
 )]
 
+use airsoft_v2::app::App;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
 use airsoft_v2::events::{EventBus, EventChannel, TaskSenders};
 use airsoft_v2::tasks::input::{keypad::keypad_task, nfc::nfc_task};
@@ -13,6 +14,7 @@ use airsoft_v2::tasks::output::{
     lights::{lights_task, LightsChannel},
     sound::{sound_task, SoundChannel},
 };
+use airsoft_v2::tasks::ticker::tick_task;
 use airsoft_v2::tasks::web::{self, WebApp};
 use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
 use airsoft_v2::{devices::keypad, game_state, mk_static};
@@ -178,6 +180,7 @@ async fn main(spawner: Spawner) {
     // Spawn input tasks
     spawner.must_spawn(keypad_task(keypad, event_bus.event_sender));
     spawner.must_spawn(nfc_task(pn532, event_bus.event_sender));
+    spawner.must_spawn(tick_task(event_bus.event_sender));
 
     game_state::init_game_state();
     info!("Game state initialized!");
@@ -215,16 +218,6 @@ async fn main(spawner: Spawner) {
 
     info!("Initiating main task loop");
 
-    loop {
-        terminal.draw(draw).unwrap();
-    }
-}
-
-fn draw(frame: &mut Frame) {
-    let text = "Ratatui on embedded devices!";
-    let paragraph = Paragraph::new(text.dark_gray()).wrap(Wrap { trim: true });
-    let bordered_block = Block::bordered()
-        .border_style(Style::new().yellow())
-        .title("Mousefood");
-    frame.render_widget(paragraph.block(bordered_block), frame.area());
+    let mut app = App::new(event_bus);
+    app.run(&mut terminal).await.unwrap();
 }
