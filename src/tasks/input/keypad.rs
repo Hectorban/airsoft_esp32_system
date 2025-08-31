@@ -13,30 +13,7 @@ pub async fn keypad_task(
     loop {
         if let Some(key) = keypad.scan() {
             info!("Key pressed: {}", key);
-            let event = match key {
-                'A' | 'a' => InputEvent::LetterA,
-                'B' | 'b' => InputEvent::LetterB,
-                'C' | 'c' => InputEvent::LetterC,
-                'D' | 'd' => InputEvent::LetterD,
-                '0' => InputEvent::Number0,
-                '1' => InputEvent::Number1,
-                '2' => InputEvent::Number2,
-                '3' => InputEvent::Number3,
-                '4' => InputEvent::Number4,
-                '5' => InputEvent::Number5,
-                '6' => InputEvent::Number6,
-                '7' => InputEvent::Number7,
-                '8' => InputEvent::Number8,
-                '9' => InputEvent::Number9,
-                '#' => InputEvent::Hashtag,
-                '*' => InputEvent::Asterisk,
-                _ => {
-                    Timer::after(Duration::from_millis(50)).await;
-                    continue
-                },
-            };
-
-            let _ = event_sender.send(event).await;
+            let _ = event_sender.send(InputEvent::KeypadEvent(key)).await;
         }
         Timer::after(Duration::from_millis(50)).await;
     };
