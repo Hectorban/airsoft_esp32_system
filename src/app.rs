@@ -39,7 +39,7 @@ pub type TerminalType<'a> = Terminal<BackendType<'a>>;
 pub mod components;
 
 pub struct App {
-    random_number: u32,
+    counter: u32,
     exit: bool,
     event_bus: EventBus,
     task_senders: TaskSenders,
@@ -48,7 +48,7 @@ pub struct App {
 impl App {
     pub fn new(event_bus: EventBus, task_senders: TaskSenders) -> Self {
         Self {
-            random_number: 0,
+            counter: 0,
             exit: false,
             event_bus,
             task_senders,
@@ -81,8 +81,8 @@ impl App {
     async fn handle_events(&mut self) -> Result<()> {
         match self.event_bus.event_receiver.receive().await {
             InputEvent::KeypadEvent(key) => match key {
-                'A' | 'a' => self.random_number = self.get_random_u32().await,
-                'D' | 'd' => self.exit = true,
+                'a' => self.counter += 1,
+                'b' => self.counter -= 1,
                 _ => {}
             },
             _ => {}
@@ -95,10 +95,10 @@ impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let title = Line::from(" RNG App ".bold());
         let instructions = Line::from(vec![
-            " Get Random ".into(),
+            " ↓ ".into(),
             "<A> ".blue().bold(),
-            " Quit ".into(),
-            "<D>".blue().bold(),
+            " ↑ ".into(),
+            "<B>".blue().bold(),
         ]);
         let block = Block::bordered()
             .title(title.centered())
@@ -107,7 +107,7 @@ impl Widget for &App {
 
         let counter_text = Text::from(vec![Line::from(vec![
             "Value: ".into(),
-            self.random_number.to_string().yellow(),
+            self.counter.to_string().yellow(),
         ])]);
 
         Paragraph::new(counter_text)
