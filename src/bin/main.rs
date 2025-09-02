@@ -14,6 +14,7 @@ use airsoft_v2::tasks::output::{
     lights::{lights_task, LightsChannel},
     sound::{sound_task, SoundChannel},
 };
+use airsoft_v2::tasks::rng::{rng_task, RngChannel};
 use airsoft_v2::tasks::ticker::tick_task;
 use airsoft_v2::tasks::web::{self, WebApp};
 use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
@@ -73,6 +74,7 @@ const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 static I2C_BUS: StaticCell<BlockingMutex<NoopRawMutex, RefCell<I2cType>>> = StaticCell::new();
 static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCell::new();
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
+static RNG_CHANNEL: StaticCell<RngChannel> = StaticCell::new();
 static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
 static SOUND_CHANNEL: StaticCell<SoundChannel> = StaticCell::new();
 static DISPLAY: StaticCell<OledDisplayType<'static>> = StaticCell::new();
@@ -89,7 +91,7 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(timer0.timer0);
     info!("Embassy initialized!");
 
-   // let rng = esp_hal::rng::Rng::new(peripherals.RNG);
+   let rng = esp_hal::rng::Rng::new(peripherals.RNG);
    // let timer1 = TimerGroup::new(peripherals.TIMG0);
    // let esp_wifi_ctrl = mk_static!(
    //     EspWifiController<'static>,
@@ -142,12 +144,16 @@ async fn main(spawner: Spawner) {
     let sound_channel = SOUND_CHANNEL.init(SoundChannel::new());
     spawner.must_spawn(sound_task(buzzer, sound_channel.receiver()));
 
+    let rng_channel = RNG_CHANNEL.init(RngChannel::new());
+    spawner.must_spawn(rng_task(rng, rng_channel.receiver()));
+
     let event_channel = EVENT_CHANNEL.init(EventChannel::new());
     let event_bus = EventBus::new(event_channel);
 
     let task_senders = TaskSenders {
         lights: lights_channel.sender(),
         sound: sound_channel.sender(),
+        rng: rng_channel.sender(),
     };
 
     let keypad_i2c = I2cDevice::new(i2c_bus);
@@ -218,7 +224,7 @@ async fn main(spawner: Spawner) {
 
     info!("Initiating main task loop");
 
-    let mut app = App::new(event_bus);
+    let mut app = App::new(event_bus, task_senders);
     // This starts the main loop
     app.run(&mut terminal).await.unwrap();
 }

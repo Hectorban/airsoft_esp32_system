@@ -18,8 +18,12 @@ use ssd1306::{
     mode::BufferedGraphicsMode, prelude::I2CInterface, size::DisplaySize128x64, Ssd1306,
 };
 use alloc::{vec, string::ToString};
+use static_cell::StaticCell;
 
-use crate::events::{EventBus, InputEvent};
+use crate::{
+    events::{EventBus, InputEvent, TaskSenders},
+    tasks::rng::{RngCommand, RngResponseChannel},
+};
 
 extern crate alloc;
 
@@ -35,17 +39,19 @@ pub type TerminalType<'a> = Terminal<BackendType<'a>>;
 pub mod components;
 
 pub struct App {
-    counter: u8,
+    random_number: u32,
     exit: bool,
-    event_bus: EventBus
+    event_bus: EventBus,
+    task_senders: TaskSenders,
 }
 
 impl App {
-    pub fn new(event_bus: EventBus) -> Self {
+    pub fn new(event_bus: EventBus, task_senders: TaskSenders) -> Self {
         Self {
-            counter: 0,
+            random_number: 0,
             exit: false,
             event_bus,
+            task_senders,
         }
     }
 
@@ -58,19 +64,27 @@ impl App {
         Ok(())
     }
 
+    async fn get_random_u32(&self) -> u32 {
+        static REPLY_CHANNEL: StaticCell<RngResponseChannel> = StaticCell::new();
+        let reply_channel = REPLY_CHANNEL.init(RngResponseChannel::new());
+        let cmd = RngCommand::GetU32 {
+            reply: reply_channel.sender(),
+        };
+        self.task_senders.rng.send(cmd).await;
+        reply_channel.receive().await
+    }
+
     fn draw(&self, frame: &mut Frame) {
         frame.render_widget(self, frame.area());
     }
 
     async fn handle_events(&mut self) -> Result<()> {
         match self.event_bus.event_receiver.receive().await {
-            InputEvent::KeypadEvent(key) => {
-                match key {
-                    'A' | 'a' => self.counter = self.counter.wrapping_add(1),
-                    'B' | 'b' => self.counter = self.counter.wrapping_sub(1),
-                    _ => {}
-                }
-            }
+            InputEvent::KeypadEvent(key) => match key {
+                'A' | 'a' => self.random_number = self.get_random_u32().await,
+                'D' | 'd' => self.exit = true,
+                _ => {}
+            },
             _ => {}
         }
         Ok(())
@@ -79,12 +93,12 @@ impl App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Line::from(" Counter App Tutorial ".bold());
+        let title = Line::from(" RNG App ".bold());
         let instructions = Line::from(vec![
-            " ↑ ".into(),
-            "<A>".blue().bold(),
-            " ↓ ".into(),
-            "<B>".blue().bold(),
+            " Get Random ".into(),
+            "<A> ".blue().bold(),
+            " Quit ".into(),
+            "<D>".blue().bold(),
         ]);
         let block = Block::bordered()
             .title(title.centered())
@@ -93,7 +107,7 @@ impl Widget for &App {
 
         let counter_text = Text::from(vec![Line::from(vec![
             "Value: ".into(),
-            self.counter.to_string().yellow(),
+            self.random_number.to_string().yellow(),
         ])]);
 
         Paragraph::new(counter_text)

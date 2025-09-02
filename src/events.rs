@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use crate::app::App;
-use crate::tasks::output::{lights, sound};
+use crate::tasks::{output::{lights, sound}, rng};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 use alloc::boxed::Box;
@@ -28,6 +28,7 @@ pub enum Command {
 pub struct TaskSenders {
     pub lights: Sender<'static, NoopRawMutex, lights::LightsCommand, { lights::LIGHTS_QUEUE_SIZE }>,
     pub sound: Sender<'static, NoopRawMutex, sound::SoundCommand, { sound::SOUND_QUEUE_SIZE }>,
+    pub rng: Sender<'static, NoopRawMutex, rng::RngCommand, { rng::RNG_QUEUE_SIZE }>,
 }
 
 pub struct EventBus {
