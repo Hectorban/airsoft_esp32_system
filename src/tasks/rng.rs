@@ -13,7 +13,6 @@ pub type RngResponseChannel = Channel<NoopRawMutex, u32, REPLY_QUEUE_SIZE>;
 // The sender part of the response channel.
 pub type RngResponseSender = Sender<'static, NoopRawMutex, u32, REPLY_QUEUE_SIZE>;
 
-#[derive(Debug)]
 pub enum RngCommand {
     GetU32 { reply: RngResponseSender },
 }
