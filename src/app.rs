@@ -23,6 +23,7 @@ use crate::{
     events::{EventBus, InputEvent, TaskSenders},
     tasks::rng::RngRequest,
 };
+use ector::ActorRequest;
 
 extern crate alloc;
 

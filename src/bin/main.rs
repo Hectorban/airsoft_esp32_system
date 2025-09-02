@@ -123,7 +123,7 @@ async fn main(spawner: Spawner) {
         NUM_LEDS,
     );
 
-    let lights_addr = actor!(spawner, lights, LightsActor<BUFFER_SIZE>, LightsActor::new(led_strip));
+    let lights_addr = actor!(spawner, lights, LightsActor<BUFFER_SIZE>, LightsActor::new(led_strip), embassy_sync::blocking_mutex::raw::NoopRawMutex);
 
     let ledc = mk_static!(Ledc, Ledc::new(peripherals.LEDC));
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
@@ -134,9 +134,9 @@ async fn main(spawner: Spawner) {
         peripherals.GPIO25,
     );
 
-    let sound_addr = actor!(spawner, sound, SoundActor, SoundActor::new(buzzer));
+    let sound_addr = actor!(spawner, sound, SoundActor, SoundActor::new(buzzer), embassy_sync::blocking_mutex::raw::NoopRawMutex);
 
-    let rng_addr = actor!(spawner, rng, RngActor, RngActor::new(rng));
+    let rng_addr = actor!(spawner, rng, RngActor, RngActor::new(rng), embassy_sync::blocking_mutex::raw::NoopRawMutex);
 
     let event_channel = EVENT_CHANNEL.init(EventChannel::new());
     let event_bus = EventBus::new(event_channel);
@@ -175,9 +175,9 @@ async fn main(spawner: Spawner) {
     );
 
     // Spawn input tasks
-    actor!(spawner, keypad, KeypadActor, KeypadActor::new(keypad, event_bus.event_sender));
-    actor!(spawner, nfc, NfcActor, NfcActor::new(pn532, event_bus.event_sender));
-    actor!(spawner, ticker, TickerActor, TickerActor::new(event_bus.event_sender));
+    actor!(spawner, keypad, KeypadActor, KeypadActor::new(keypad, event_bus.event_sender), embassy_sync::blocking_mutex::raw::NoopRawMutex);
+    actor!(spawner, nfc, NfcActor, NfcActor::new(pn532, event_bus.event_sender), embassy_sync::blocking_mutex::raw::NoopRawMutex);
+    actor!(spawner, ticker, TickerActor, TickerActor::new(event_bus.event_sender), embassy_sync::blocking_mutex::raw::NoopRawMutex);
 
     game_state::init_game_state();
     info!("Game state initialized!");

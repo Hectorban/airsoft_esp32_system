@@ -100,7 +100,7 @@ impl Actor for NfcActor {
                         let num_targets = response[0];
                         if num_targets > 0 && response.len() >= 6 {
                             info!("Card detected!");
-                            let sel_res = response[4]; // SEL_RES (SAK)
+                            let _sel_res = response[4]; // SEL_RES (SAK)
                             let uid_len = response[5] as usize;
 
                             if response.len() >= 6 + uid_len && uid_len > 0 {
