@@ -219,5 +219,6 @@ async fn main(spawner: Spawner) {
     info!("Initiating main task loop");
 
     let mut app = App::new(event_bus);
+    // This starts the main loop
     app.run(&mut terminal).await.unwrap();
 }

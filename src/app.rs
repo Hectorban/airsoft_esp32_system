@@ -32,8 +32,7 @@ pub type BackendType<'a> = EmbeddedBackend<'a, DisplayType<'a>, BinaryColor>;
 
 pub type TerminalType<'a> = Terminal<BackendType<'a>>;
 
-pub mod main_menu;
-pub mod search_and_destroy;
+pub mod components;
 
 pub struct App {
     counter: u8,
@@ -72,9 +71,6 @@ impl App {
                     _ => {}
                 }
             }
-            InputEvent::GameTick => {
-                self.counter = self.counter.wrapping_add(1);
-            }
             _ => {}
         }
         Ok(())
@@ -85,16 +81,14 @@ impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let title = Line::from(" Counter App Tutorial ".bold());
         let instructions = Line::from(vec![
-            " Decrement ".into(),
-            "<Left>".blue().bold(),
-            " Increment ".into(),
-            "<Right>".blue().bold(),
-            " Quit ".into(),
-            "<Q> ".blue().bold(),
+            " ↑ ".into(),
+            "<A>".blue().bold(),
+            " ↓ ".into(),
+            "<B>".blue().bold(),
         ]);
         let block = Block::bordered()
             .title(title.centered())
-            .title_bottom(instructions.centered())
+            .title_bottom(instructions.right_aligned())
             .border_set(border::THICK);
 
         let counter_text = Text::from(vec![Line::from(vec![
