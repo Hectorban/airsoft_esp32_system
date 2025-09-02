@@ -1,7 +1,7 @@
 use crate::tasks::output::{lights, sound};
 use crate::tasks::rng::RngRequest;
 use ector::mutex::NoopRawMutex as EctorNoopRawMutex;
-use ector::{Address, DynamicAddress};
+use ector::Address;
 
 /// Input events sent directly to the App actor
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -56,7 +56,7 @@ pub async fn boot_animation(display: &mut Ssd1306<
             .draw(&mut framebuffer).unwrap();
 
         // Draw centered text to framebuffer
-        let text = format!("{}%", progress);
+        let text = format!("{progress}%");
         Text::with_text_style(
             &text,
             framebuffer.bounding_box().center(),

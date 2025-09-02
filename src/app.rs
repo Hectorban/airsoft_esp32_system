@@ -71,14 +71,11 @@ impl App {
     }
 
     fn handle_input_event(&mut self, event: InputEvent) {
-        match event {
-            InputEvent::KeypadEvent(key) => match key {
-                'a' => self.counter += 1,
-                'b' => self.counter -= 1,
-                _ => {}
-            },
+        if let InputEvent::KeypadEvent(key) = event { match key {
+            'a' => self.counter += 1,
+            'b' => self.counter -= 1,
             _ => {}
-        }
+        } }
     }
 }
 
