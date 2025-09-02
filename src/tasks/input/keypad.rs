@@ -1,20 +1,40 @@
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Sender};
+use ector::{Actor, Address, Inbox};
 use defmt::info;
 use embassy_time::{Duration, Timer};
 
 use crate::{devices::keypad, events::{InputEvent, EVENT_QUEUE_SIZE}};
 
+pub struct KeypadActor {
+    keypad: keypad::I2cKeypad,
+    event_sender: Sender<'static, NoopRawMutex, InputEvent, { EVENT_QUEUE_SIZE }>,
+}
 
-#[embassy_executor::task]
-pub async fn keypad_task(
-    mut keypad: keypad::I2cKeypad,
-    event_sender: Sender<'static, NoopRawMutex, InputEvent, {EVENT_QUEUE_SIZE}>,
-) {
-    loop {
-        if let Some(key) = keypad.scan() {
-            info!("Key pressed: {}", key);
-            let _ = event_sender.send(InputEvent::KeypadEvent(key)).await;
+impl KeypadActor {
+    pub fn new(
+        keypad: keypad::I2cKeypad,
+        event_sender: Sender<'static, NoopRawMutex, InputEvent, { EVENT_QUEUE_SIZE }>,
+    ) -> Self {
+        Self {
+            keypad,
+            event_sender,
         }
-        Timer::after(Duration::from_millis(50)).await;
-    };
+    }
+}
+
+impl Actor for KeypadActor {
+    type Message = !;
+
+    async fn on_mount<M>(&mut self, _: Address<Self::Message>, _inbox: M) -> !
+    where
+        M: Inbox<Self::Message>,
+    {
+        loop {
+            if let Some(key) = self.keypad.scan() {
+                info!("Key pressed: {}", key);
+                let _ = self.event_sender.send(InputEvent::KeypadEvent(key)).await;
+            }
+            Timer::after(Duration::from_millis(50)).await;
+        }
+    }
 }

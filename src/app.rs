@@ -18,11 +18,10 @@ use ssd1306::{
     mode::BufferedGraphicsMode, prelude::I2CInterface, size::DisplaySize128x64, Ssd1306,
 };
 use alloc::{vec, string::ToString};
-use static_cell::StaticCell;
 
 use crate::{
     events::{EventBus, InputEvent, TaskSenders},
-    tasks::rng::{RngCommand, RngResponseChannel},
+    tasks::rng::RngRequest,
 };
 
 extern crate alloc;
@@ -65,13 +64,7 @@ impl App {
     }
 
     async fn get_random_u32(&self) -> u32 {
-        static REPLY_CHANNEL: StaticCell<RngResponseChannel> = StaticCell::new();
-        let reply_channel = REPLY_CHANNEL.init(RngResponseChannel::new());
-        let cmd = RngCommand::GetU32 {
-            reply: reply_channel.sender(),
-        };
-        self.task_senders.rng.send(cmd).await;
-        reply_channel.receive().await
+        self.task_senders.rng.request(()).await
     }
 
     fn draw(&self, frame: &mut Frame) {
