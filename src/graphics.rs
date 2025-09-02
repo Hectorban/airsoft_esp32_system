@@ -12,7 +12,6 @@ use embedded_graphics::{
 use embedded_graphics_framebuf::FrameBuf;
 use embassy_time::{Duration, Timer};
 use alloc::format;
-use tinybmp::Bmp;
 
 extern crate alloc;
 

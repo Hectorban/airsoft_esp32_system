@@ -10,6 +10,8 @@ dependencies = [
  "bt-hci",
  "critical-section",
  "defmt 1.0.1",
+ "ector",
+ "ector-macros",
  "embassy-embedded-hal 0.4.0",
  "embassy-executor",
  "embassy-net",
@@ -361,6 +363,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95249b50c6c185bee49034bcb378a49dc2b5dff0be90ff6616d31d64febab05d"
 dependencies = [
  "litrs",
+]
+
+[[package]]
+name = "ector"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "171774929044d811736a6498d50fedd2d4d9ededc035073420deaefc15db7b35"
+dependencies = [
+ "defmt 0.3.100",
+ "ector-macros",
+ "embassy-executor",
+ "embassy-sync 0.6.2",
+ "futures",
+ "portable-atomic",
+ "static_cell",
+]
+
+[[package]]
+name = "ector-macros"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a39444881d223c9d51d936d2a4631df71d4c00e8edbc167303bfb89d6353d418"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

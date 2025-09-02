@@ -1,18 +1,15 @@
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Sender};
 use embassy_time::{Duration, Timer};
-use ector::{Actor, DynamicAddress, Inbox};
+use ector::{Actor, ActorAddress, DynamicAddress, Inbox};
 
-use crate::events::{InputEvent, EVENT_QUEUE_SIZE};
+use crate::events::InputEvent;
 
 pub struct TickerActor {
-    event_sender: Sender<'static, NoopRawMutex, InputEvent, { EVENT_QUEUE_SIZE }>,
+    app_address: DynamicAddress<InputEvent>,
 }
 
 impl TickerActor {
-    pub fn new(
-        event_sender: Sender<'static, NoopRawMutex, InputEvent, { EVENT_QUEUE_SIZE }>,
-    ) -> Self {
-        Self { event_sender }
+    pub fn new(app_address: DynamicAddress<InputEvent>) -> Self {
+        Self { app_address }
     }
 }
 
@@ -24,7 +21,7 @@ impl Actor for TickerActor {
         M: Inbox<Self::Message>,
     {
         loop {
-            let _ = self.event_sender.send(InputEvent::GameTick).await;
+            self.app_address.notify(InputEvent::GameTick).await;
             Timer::after(Duration::from_secs(1)).await;
         }
     }

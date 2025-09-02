@@ -8,47 +8,51 @@
 
 use airsoft_v2::app::App;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
-use airsoft_v2::events::{EventBus, EventChannel, TaskSenders};
+use airsoft_v2::events::{InputEvent, TaskSenders};
 use airsoft_v2::tasks::input::keypad::KeypadActor;
 use airsoft_v2::tasks::input::nfc::NfcActor;
 use airsoft_v2::tasks::output::lights::{LightsActor, LightsCommand};
 use airsoft_v2::tasks::output::sound::{SoundActor, SoundCommand};
 use airsoft_v2::tasks::rng::{RngActor, RngRequest};
 use airsoft_v2::tasks::ticker::TickerActor;
-use ector::actor;
 use airsoft_v2::tasks::web::{self, WebApp};
 use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
 use airsoft_v2::{devices::keypad, game_state, mk_static};
+use ector::mutex::NoopRawMutex as EctorNoopRawMutex;
+use ector::{ActorContext, actor};
 
+use airsoft_v2::tasks::input::nfc::EmbassyTimer;
 use alloc::boxed::Box;
+use core::cell::RefCell;
 use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::{Mutex as BlockingMutex, raw::NoopRawMutex};
 use embassy_sync::mutex::Mutex;
-use core::cell::RefCell;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_hal::i2c::master::I2c;
-use esp_hal::ledc::{self, timer, LSGlobalClkSource, Ledc};
+use esp_hal::ledc::{self, LSGlobalClkSource, Ledc, timer};
 use esp_hal::rmt::Rmt;
 use esp_hal::spi;
 use esp_hal::spi::master::Spi;
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
-use esp_hal::{i2c, Async};
+use esp_hal::{Async, i2c};
 use esp_hal_buzzer::Buzzer;
-use mousefood::{EmbeddedBackend, EmbeddedBackendConfig};
-use pn532::{spi::{SPIInterface, NoIRQ}, Pn532};
-use airsoft_v2::tasks::input::nfc::EmbassyTimer;
-use esp_hal_smartled::{buffer_size, smart_led_buffer, SmartLedsAdapter};
+use esp_hal_smartled::{SmartLedsAdapter, buffer_size, smart_led_buffer};
 use esp_println as _;
 use esp_wifi::EspWifiController;
+use mousefood::{EmbeddedBackend, EmbeddedBackendConfig};
+use pn532::{
+    Pn532,
+    spi::{NoIRQ, SPIInterface},
+};
 use ratatui::widgets::{Block, Paragraph, Wrap};
 use ratatui::{Frame, Terminal, style::*};
-use ssd1306::{prelude::*, Ssd1306};
 use ssd1306::prelude::I2CInterface as SsdI2CInterface;
+use ssd1306::{Ssd1306, prelude::*};
 use static_cell::StaticCell;
 
 use embassy_embedded_hal::shared_bus::blocking::i2c::I2cDevice;
@@ -73,8 +77,10 @@ const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 
 static I2C_BUS: StaticCell<BlockingMutex<NoopRawMutex, RefCell<I2cType>>> = StaticCell::new();
 static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCell::new();
-static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
 static DISPLAY: StaticCell<OledDisplayType<'static>> = StaticCell::new();
+
+// Actor contexts following the circular reference pattern
+static APP_CONTEXT: ActorContext<App> = ActorContext::new();
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -82,29 +88,29 @@ async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(config);
 
     esp_alloc::heap_allocator!(size: 64 * 1024);
-    //esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024); 
+    //esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024);
 
     let timer0 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timer0.timer0);
     info!("Embassy initialized!");
 
-   let rng = esp_hal::rng::Rng::new(peripherals.RNG);
-   // let timer1 = TimerGroup::new(peripherals.TIMG0);
-   // let esp_wifi_ctrl = mk_static!(
-   //     EspWifiController<'static>,
-   //     esp_wifi::init(timer1.timer0, rng).unwrap()
-   // );
+    let rng = esp_hal::rng::Rng::new(peripherals.RNG);
+    // let timer1 = TimerGroup::new(peripherals.TIMG0);
+    // let esp_wifi_ctrl = mk_static!(
+    //     EspWifiController<'static>,
+    //     esp_wifi::init(timer1.timer0, rng).unwrap()
+    // );
 
-   // info!("Attempting to start wifi..");
-   // let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
-   //     .await
-   //     .expect("Failed to start wifi");
+    // info!("Attempting to start wifi..");
+    // let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
+    //     .await
+    //     .expect("Failed to start wifi");
 
-   // let webapp = WebApp::default();
-   // spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
-   // spawner.must_spawn(dhcp_server(stack));
+    // let webapp = WebApp::default();
+    // spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
+    // spawner.must_spawn(dhcp_server(stack));
 
-   // info!("Web server started!");
+    // info!("Web server started!");
 
     let i2c = I2c::new(
         peripherals.I2C0,
@@ -123,7 +129,7 @@ async fn main(spawner: Spawner) {
         NUM_LEDS,
     );
 
-    let lights_addr = actor!(spawner, lights, LightsActor<BUFFER_SIZE>, LightsActor::new(led_strip), embassy_sync::blocking_mutex::raw::NoopRawMutex);
+    let lights_addr: ector::DynamicAddress<LightsCommand> = actor!(spawner, lights, LightsActor<BUFFER_SIZE>, LightsActor::new(led_strip), EctorNoopRawMutex).into();
 
     let ledc = mk_static!(Ledc, Ledc::new(peripherals.LEDC));
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
@@ -134,18 +140,18 @@ async fn main(spawner: Spawner) {
         peripherals.GPIO25,
     );
 
-    let sound_addr = actor!(spawner, sound, SoundActor, SoundActor::new(buzzer), embassy_sync::blocking_mutex::raw::NoopRawMutex);
+    let sound_addr: ector::DynamicAddress<SoundCommand> = actor!(spawner, sound, SoundActor, SoundActor::new(buzzer), EctorNoopRawMutex).into();
 
-    let rng_addr = actor!(spawner, rng, RngActor, RngActor::new(rng), embassy_sync::blocking_mutex::raw::NoopRawMutex);
-
-    let event_channel = EVENT_CHANNEL.init(EventChannel::new());
-    let event_bus = EventBus::new(event_channel);
+    let rng_addr: ector::Address<RngRequest, EctorNoopRawMutex> = actor!(spawner, rng_actor, RngActor, RngActor::new(rng), EctorNoopRawMutex).into();
 
     let task_senders = TaskSenders {
         lights: lights_addr,
         sound: sound_addr,
         rng: rng_addr,
     };
+
+    // Create the App actor address for circular references
+    let app_addr = APP_CONTEXT.dyn_address();
 
     let keypad_i2c = I2cDevice::new(i2c_bus);
     let keypad = keypad::I2cKeypad::new(KEYPAD_ADDRESS, keypad_i2c);
@@ -174,10 +180,28 @@ async fn main(spawner: Spawner) {
         EmbassyTimer,
     );
 
-    // Spawn input tasks
-    actor!(spawner, keypad, KeypadActor, KeypadActor::new(keypad, event_bus.event_sender), embassy_sync::blocking_mutex::raw::NoopRawMutex);
-    actor!(spawner, nfc, NfcActor, NfcActor::new(pn532, event_bus.event_sender), embassy_sync::blocking_mutex::raw::NoopRawMutex);
-    actor!(spawner, ticker, TickerActor, TickerActor::new(event_bus.event_sender), embassy_sync::blocking_mutex::raw::NoopRawMutex);
+    // Spawn input tasks with direct communication to App
+    actor!(
+        spawner,
+        keypad_actor,
+        KeypadActor,
+        KeypadActor::new(keypad, app_addr.clone()),
+        EctorNoopRawMutex
+    );
+    actor!(
+        spawner,
+        nfc,
+        NfcActor,
+        NfcActor::new(pn532, app_addr.clone()),
+        EctorNoopRawMutex
+    );
+    actor!(
+        spawner,
+        ticker,
+        TickerActor,
+        TickerActor::new(app_addr.clone()),
+        EctorNoopRawMutex
+    );
 
     game_state::init_game_state();
     info!("Game state initialized!");
@@ -211,11 +235,15 @@ async fn main(spawner: Spawner) {
     };
 
     let backend = EmbeddedBackend::new(display, config);
-    let mut terminal = Terminal::new(backend).unwrap();
+    let terminal = Terminal::new(backend).unwrap();
 
     info!("Initiating main task loop");
 
-    let mut app = App::new(event_bus, task_senders);
-    // This starts the main loop
-    app.run(&mut terminal).await.unwrap();
+    // Create and mount the App actor following the circular reference pattern
+    let mut app = App::new(task_senders);
+    app.set_terminal(terminal);
+
+    // Mount the App actor - this starts the main loop
+    let app_future = APP_CONTEXT.mount(app);
+    app_future.await;
 }

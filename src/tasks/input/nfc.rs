@@ -2,14 +2,14 @@ use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Timer};
-use ector::{Actor, DynamicAddress, Inbox};
+use ector::{Actor, ActorAddress, DynamicAddress, Inbox};
 use esp_hal::gpio::Output;
 use esp_hal::spi::master::Spi;
 use esp_hal::Async;
 use pn532::{spi::SPIInterface, Pn532, Request, requests::SAMMode};
 use core::future::Future;
 
-use crate::events::{InputEvent, EVENT_QUEUE_SIZE};
+use crate::events::InputEvent;
 
 // Timer wrapper that implements CountDown for PN532
 pub struct EmbassyTimer;
@@ -39,25 +39,15 @@ type Pn532Type = Pn532<SPIInterface<SpiDevice<'static, NoopRawMutex, Spi<'static
 
 pub struct NfcActor {
     pn532: Pn532Type,
-    event_sender: embassy_sync::channel::Sender<
-        'static,
-        NoopRawMutex,
-        InputEvent,
-        { EVENT_QUEUE_SIZE },
-    >,
+    app_address: DynamicAddress<InputEvent>,
 }
 
 impl NfcActor {
     pub fn new(
         pn532: Pn532Type,
-        event_sender: embassy_sync::channel::Sender<
-            'static,
-            NoopRawMutex,
-            InputEvent,
-            { EVENT_QUEUE_SIZE },
-        >,
+        app_address: DynamicAddress<InputEvent>,
     ) -> Self {
-        Self { pn532, event_sender }
+        Self { pn532, app_address }
     }
 }
 
@@ -108,7 +98,7 @@ impl Actor for NfcActor {
                                 info!("Card UID: {:?}", uid);
 
                                 // Send event to the game system
-                                self.event_sender.send(InputEvent::CardDetected).await;
+                                self.app_address.notify(InputEvent::CardDetected).await;
 
                                 // Prevent rapid re-detection of the same card
                                 Timer::after(Duration::from_millis(2000)).await;
