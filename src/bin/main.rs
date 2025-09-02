@@ -129,7 +129,7 @@ async fn main(spawner: Spawner) {
         NUM_LEDS,
     );
 
-    let lights_addr: ector::DynamicAddress<LightsCommand> = actor!(spawner, lights, LightsActor<BUFFER_SIZE>, LightsActor::new(led_strip), EctorNoopRawMutex).into();
+    let lights_addr = actor!(spawner, lights, LightsActor<BUFFER_SIZE>, LightsActor::new(led_strip), EctorNoopRawMutex);
 
     let ledc = mk_static!(Ledc, Ledc::new(peripherals.LEDC));
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
@@ -140,9 +140,9 @@ async fn main(spawner: Spawner) {
         peripherals.GPIO25,
     );
 
-    let sound_addr: ector::DynamicAddress<SoundCommand> = actor!(spawner, sound, SoundActor, SoundActor::new(buzzer), EctorNoopRawMutex).into();
+    let sound_addr = actor!(spawner, sound, SoundActor, SoundActor::new(buzzer), EctorNoopRawMutex);
 
-    let rng_addr: ector::Address<RngRequest, EctorNoopRawMutex> = actor!(spawner, rng_actor, RngActor, RngActor::new(rng), EctorNoopRawMutex).into();
+    let rng_addr = actor!(spawner, rng_actor, RngActor, RngActor::new(rng), EctorNoopRawMutex);
 
     let task_senders = TaskSenders {
         lights: lights_addr,
