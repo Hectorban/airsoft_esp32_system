@@ -56,6 +56,12 @@ pub struct TheFinalsView {
     target_cash: u32,
 }
 
+impl Default for TheFinalsView {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TheFinalsView {
     pub fn new() -> Self {
         let mut tokens = Vec::new();
@@ -292,7 +298,7 @@ impl View for TheFinalsView {
         .iter()
         .enumerate()
         .map(|(i, (name, cash, _team))| {
-            let cash_text = format!("{}: ${}", name, cash);
+            let cash_text = format!("{name}: ${cash}");
             let style = if i == self.selected_team_index {
                 Style::default()
                     .fg(Color::Black)

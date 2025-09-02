@@ -44,6 +44,12 @@ pub struct BattlefieldView {
     max_tickets: u32,
 }
 
+impl Default for BattlefieldView {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BattlefieldView {
     pub fn new() -> Self {
         Self {
@@ -87,7 +93,6 @@ impl BattlefieldView {
         match &point.owner {
             Some(current_owner) if *current_owner == team => {
                 // Already owned by this team
-                return;
             },
             _ => {
                 point.owner = Some(team);

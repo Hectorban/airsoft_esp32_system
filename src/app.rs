@@ -15,7 +15,6 @@ use ssd1306::{
 
 use crate::{
     events::{InputEvent, TaskSenders},
-    tasks::output::sound::SoundCommand,
     views::{Router, NavigationAction},
 };
 use ector::{Actor, DynamicAddress, Inbox};
@@ -86,11 +85,8 @@ impl Actor for App {
                 // Handle any navigation actions if needed
                 // The router handles navigation internally, but we could
                 // handle app-level actions like Exit here
-                match nav_action {
-                    NavigationAction::Exit => {
-                        // Could handle app exit here if needed
-                    },
-                    _ => {}
+                if let NavigationAction::Exit = nav_action {
+                    // Could handle app exit here if needed
                 }
             }
         }

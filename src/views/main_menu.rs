@@ -6,6 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 use alloc::vec::Vec;
+use alloc::vec;
 
 use crate::{
     events::{InputEvent, TaskSenders},
@@ -16,7 +17,13 @@ use super::{View, ViewType, NavigationAction};
 
 pub struct MainMenuView {
     selected_index: usize,
-    menu_items: [&'static str; 3],
+    menu_items: [&'static str; 4],
+}
+
+impl Default for MainMenuView {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MainMenuView {
@@ -24,9 +31,10 @@ impl MainMenuView {
         Self {
             selected_index: 0,
             menu_items: [
-                "CSGO - Search & Destroy",
-                "Battlefield - Domination", 
-                "The Finals - Cashout"
+                "Search & Destroy",
+                "Domination", 
+                "Cashout",
+                "Configuration",
             ],
         }
     }
@@ -49,7 +57,7 @@ impl MainMenuView {
     
     fn select_current_item(&self) -> Option<NavigationAction> {
         match self.selected_index {
-            0 => Some(NavigationAction::GoTo(ViewType::CSGO)),
+            0 => Some(NavigationAction::GoTo(ViewType::SearchAndDestroy)),
             1 => Some(NavigationAction::GoTo(ViewType::Battlefield)),
             2 => Some(NavigationAction::GoTo(ViewType::TheFinals)),
             _ => None,
@@ -62,17 +70,17 @@ impl View for MainMenuView {
         match event {
             InputEvent::KeypadEvent(key) => {
                 match key {
-                    '2' => { // Up arrow or '2' key
+                    'a' => { // Up arrow or '2' key
                         self.move_selection_up();
                         task_senders.sound.try_send(SoundCommand::Beep).ok();
                         None
                     },
-                    '8' => { // Down arrow or '8' key  
+                    'b' => { // Down arrow or '8' key  
                         self.move_selection_down();
                         task_senders.sound.try_send(SoundCommand::Beep).ok();
                         None
                     },
-                    '5' => { // Enter/Select or '5' key
+                    'd' => { // Enter/Select or '5' key
                         task_senders.sound.try_send(SoundCommand::SuccessBeep).ok();
                         self.select_current_item()
                     },
@@ -89,22 +97,6 @@ impl View for MainMenuView {
     }
     
     fn render(&self, frame: &mut Frame, area: Rect) {
-        // Create layout
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // Title
-                Constraint::Min(5),    // Menu items
-                Constraint::Length(3), // Instructions
-            ])
-            .split(area);
-        
-        // Title
-        let title = Paragraph::new("AIRSOFT GAME SYSTEM")
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(title, chunks[0]);
-        
         // Menu items
         let menu_items: Vec<ListItem> = self.menu_items
             .iter()
@@ -122,20 +114,24 @@ impl View for MainMenuView {
                 ListItem::new(Line::from(Span::styled(*item, style)))
             })
             .collect();
+
+        let instructions = Line::from(vec![
+            " → ".into(),
+            "<D>".into(),
+            " ↑ ".into(),
+            "<A>".into(),
+            " ↓ ".into(),
+            "<B>".into(),
+        ]);
         
         let menu_list = List::new(menu_items)
             .block(Block::default()
                 .title("Select Game Mode")
+                .title_bottom(instructions)
                 .borders(Borders::ALL)
                 .style(Style::default().fg(Color::White)));
         
-        frame.render_widget(menu_list, chunks[1]);
-        
-        // Instructions
-        let instructions = Paragraph::new("Use 2/8 to navigate, 5 to select")
-            .style(Style::default().fg(Color::Gray))
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(instructions, chunks[2]);
+        frame.render_widget(menu_list, area);
     }
     
     fn on_enter(&mut self, task_senders: &TaskSenders) {

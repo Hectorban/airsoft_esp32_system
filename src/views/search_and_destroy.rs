@@ -14,15 +14,15 @@ use crate::{
 use super::{View, ViewType, NavigationAction};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum CSGOGameState {
+pub enum SearchAndDestroyGameState {
     Waiting,
     RoundActive,
     BombPlanted,
     RoundEnded,
 }
 
-pub struct CSGOView {
-    game_state: CSGOGameState,
+pub struct SearchAndDestroyView {
+    game_state: SearchAndDestroyGameState,
     round_number: u32,
     terrorist_score: u32,
     counter_terrorist_score: u32,
@@ -31,10 +31,16 @@ pub struct CSGOView {
     max_rounds: u32,
 }
 
-impl CSGOView {
+impl Default for SearchAndDestroyView {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SearchAndDestroyView {
     pub fn new() -> Self {
         Self {
-            game_state: CSGOGameState::Waiting,
+            game_state: SearchAndDestroyGameState::Waiting,
             round_number: 0,
             terrorist_score: 0,
             counter_terrorist_score: 0,
@@ -45,7 +51,7 @@ impl CSGOView {
     }
     
     fn start_round(&mut self, task_senders: &TaskSenders) {
-        self.game_state = CSGOGameState::RoundActive;
+        self.game_state = SearchAndDestroyGameState::RoundActive;
         self.round_number += 1;
         self.round_time_remaining = 120; // 2 minutes
         self.bomb_time_remaining = None;
@@ -55,8 +61,8 @@ impl CSGOView {
     }
     
     fn plant_bomb(&mut self, task_senders: &TaskSenders) {
-        if self.game_state == CSGOGameState::RoundActive {
-            self.game_state = CSGOGameState::BombPlanted;
+        if self.game_state == SearchAndDestroyGameState::RoundActive {
+            self.game_state = SearchAndDestroyGameState::BombPlanted;
             self.bomb_time_remaining = Some(40); // 40 seconds to defuse
             
             // Play bomb plant sound
@@ -65,8 +71,8 @@ impl CSGOView {
     }
     
     fn defuse_bomb(&mut self, task_senders: &TaskSenders) {
-        if self.game_state == CSGOGameState::BombPlanted {
-            self.game_state = CSGOGameState::RoundEnded;
+        if self.game_state == SearchAndDestroyGameState::BombPlanted {
+            self.game_state = SearchAndDestroyGameState::RoundEnded;
             self.counter_terrorist_score += 1;
             self.bomb_time_remaining = None;
             
@@ -76,7 +82,7 @@ impl CSGOView {
     }
     
     fn end_round(&mut self, terrorists_win: bool, task_senders: &TaskSenders) {
-        self.game_state = CSGOGameState::RoundEnded;
+        self.game_state = SearchAndDestroyGameState::RoundEnded;
         self.bomb_time_remaining = None;
         
         if terrorists_win {
@@ -89,7 +95,7 @@ impl CSGOView {
     }
     
     fn reset_game(&mut self) {
-        self.game_state = CSGOGameState::Waiting;
+        self.game_state = SearchAndDestroyGameState::Waiting;
         self.round_number = 0;
         self.terrorist_score = 0;
         self.counter_terrorist_score = 0;
@@ -103,14 +109,14 @@ impl CSGOView {
     }
 }
 
-impl View for CSGOView {
+impl View for SearchAndDestroyView {
     fn handle_input(&mut self, event: InputEvent, task_senders: &TaskSenders) -> Option<NavigationAction> {
         match event {
             InputEvent::KeypadEvent(key) => {
                 match key {
                     '1' => { // '1' key - Start/Reset round
                         match self.game_state {
-                            CSGOGameState::Waiting | CSGOGameState::RoundEnded => {
+                            SearchAndDestroyGameState::Waiting | SearchAndDestroyGameState::RoundEnded => {
                                 if self.is_match_over() {
                                     self.reset_game();
                                 } else {
@@ -130,15 +136,15 @@ impl View for CSGOView {
                         None
                     },
                     '9' => { // '9' key - Terrorists win round
-                        if self.game_state == CSGOGameState::RoundActive || 
-                           self.game_state == CSGOGameState::BombPlanted {
+                        if self.game_state == SearchAndDestroyGameState::RoundActive || 
+                           self.game_state == SearchAndDestroyGameState::BombPlanted {
                             self.end_round(true, task_senders);
                         }
                         None
                     },
                     '6' => { // '6' key - Counter-terrorists win round
-                        if self.game_state == CSGOGameState::RoundActive || 
-                           self.game_state == CSGOGameState::BombPlanted {
+                        if self.game_state == SearchAndDestroyGameState::RoundActive || 
+                           self.game_state == SearchAndDestroyGameState::BombPlanted {
                             self.end_round(false, task_senders);
                         }
                         None
@@ -152,10 +158,10 @@ impl View for CSGOView {
             InputEvent::CardDetected => {
                 // NFC could be used for bomb planting/defusing
                 match self.game_state {
-                    CSGOGameState::RoundActive => {
+                    SearchAndDestroyGameState::RoundActive => {
                         self.plant_bomb(task_senders);
                     },
-                    CSGOGameState::BombPlanted => {
+                    SearchAndDestroyGameState::BombPlanted => {
                         self.defuse_bomb(task_senders);
                     },
                     _ => {}
@@ -180,7 +186,7 @@ impl View for CSGOView {
             .split(area);
         
         // Title
-        let title = Paragraph::new("CSGO - Search & Destroy")
+        let title = Paragraph::new("SearchAndDestroy - Search & Destroy")
             .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
@@ -201,10 +207,10 @@ impl View for CSGOView {
         
         // Game state
         let state_text = match self.game_state {
-            CSGOGameState::Waiting => "Waiting to start...",
-            CSGOGameState::RoundActive => "Round in progress",
-            CSGOGameState::BombPlanted => "BOMB PLANTED!",
-            CSGOGameState::RoundEnded => {
+            SearchAndDestroyGameState::Waiting => "Waiting to start...",
+            SearchAndDestroyGameState::RoundActive => "Round in progress",
+            SearchAndDestroyGameState::BombPlanted => "BOMB PLANTED!",
+            SearchAndDestroyGameState::RoundEnded => {
                 if self.is_match_over() {
                     if self.terrorist_score > self.counter_terrorist_score {
                         "TERRORISTS WIN!"
@@ -217,8 +223,8 @@ impl View for CSGOView {
             },
         };
         let state_color = match self.game_state {
-            CSGOGameState::BombPlanted => Color::Red,
-            CSGOGameState::RoundEnded => Color::Green,
+            SearchAndDestroyGameState::BombPlanted => Color::Red,
+            SearchAndDestroyGameState::RoundEnded => Color::Green,
             _ => Color::White,
         };
         let state = Paragraph::new(state_text)
@@ -233,7 +239,7 @@ impl View for CSGOView {
                 .gauge_style(Style::default().fg(Color::Red))
                 .ratio(bomb_time as f64 / 40.0);
             frame.render_widget(bomb_gauge, chunks[4]);
-        } else if self.game_state == CSGOGameState::RoundActive {
+        } else if self.game_state == SearchAndDestroyGameState::RoundActive {
             let round_gauge = Gauge::default()
                 .block(Block::default().title("Round Timer").borders(Borders::ALL))
                 .gauge_style(Style::default().fg(Color::Blue))
@@ -243,10 +249,10 @@ impl View for CSGOView {
         
         // Instructions
         let instructions = match self.game_state {
-            CSGOGameState::Waiting => "1: Start Round | 0: Back to Menu",
-            CSGOGameState::RoundActive => "3: Plant Bomb | 6: CT Win | 9: T Win | 0: Back",
-            CSGOGameState::BombPlanted => "7: Defuse | 6: CT Win | 9: T Win | 0: Back",
-            CSGOGameState::RoundEnded => "1: Next Round | 0: Back to Menu",
+            SearchAndDestroyGameState::Waiting => "1: Start Round | 0: Back to Menu",
+            SearchAndDestroyGameState::RoundActive => "3: Plant Bomb | 6: CT Win | 9: T Win | 0: Back",
+            SearchAndDestroyGameState::BombPlanted => "7: Defuse | 6: CT Win | 9: T Win | 0: Back",
+            SearchAndDestroyGameState::RoundEnded => "1: Next Round | 0: Back to Menu",
         };
         let instr_widget = Paragraph::new(instructions)
             .style(Style::default().fg(Color::Gray))
@@ -259,6 +265,6 @@ impl View for CSGOView {
     }
     
     fn view_type(&self) -> ViewType {
-        ViewType::CSGO
+        ViewType::SearchAndDestroy
     }
 }

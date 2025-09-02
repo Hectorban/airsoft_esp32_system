@@ -5,7 +5,7 @@ use crate::{
 };
 
 pub mod main_menu;
-pub mod csgo;
+pub mod search_and_destroy;
 pub mod battlefield;
 pub mod the_finals;
 
@@ -13,7 +13,7 @@ pub mod the_finals;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ViewType {
     MainMenu,
-    CSGO,
+    SearchAndDestroy,
     Battlefield,
     TheFinals,
 }
@@ -49,7 +49,7 @@ pub struct Router {
     current_view: ViewType,
     view_stack: Vec<ViewType>, // History stack for back navigation
     main_menu: main_menu::MainMenuView,
-    csgo: csgo::CSGOView,
+    search_and_destroy: search_and_destroy::SearchAndDestroyView,
     battlefield: battlefield::BattlefieldView,
     the_finals: the_finals::TheFinalsView,
 }
@@ -60,7 +60,7 @@ impl Router {
             current_view: ViewType::MainMenu,
             view_stack: Vec::new(),
             main_menu: main_menu::MainMenuView::new(),
-            csgo: csgo::CSGOView::new(),
+            search_and_destroy: search_and_destroy::SearchAndDestroyView::new(),
             battlefield: battlefield::BattlefieldView::new(),
             the_finals: the_finals::TheFinalsView::new(),
         };
@@ -133,7 +133,7 @@ impl Router {
     fn get_current_view(&self) -> &dyn View {
         match self.current_view {
             ViewType::MainMenu => &self.main_menu,
-            ViewType::CSGO => &self.csgo,
+            ViewType::SearchAndDestroy => &self.search_and_destroy,
             ViewType::Battlefield => &self.battlefield,
             ViewType::TheFinals => &self.the_finals,
         }
@@ -142,7 +142,7 @@ impl Router {
     fn get_current_view_mut(&mut self) -> &mut dyn View {
         match self.current_view {
             ViewType::MainMenu => &mut self.main_menu,
-            ViewType::CSGO => &mut self.csgo,
+            ViewType::SearchAndDestroy => &mut self.search_and_destroy,
             ViewType::Battlefield => &mut self.battlefield,
             ViewType::TheFinals => &mut self.the_finals,
         }
