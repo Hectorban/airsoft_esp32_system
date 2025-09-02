@@ -13,12 +13,14 @@ pub type RngResponseChannel = Channel<NoopRawMutex, u32, REPLY_QUEUE_SIZE>;
 // The sender part of the response channel.
 pub type RngResponseSender = Sender<'static, NoopRawMutex, u32, REPLY_QUEUE_SIZE>;
 
+#[derive(Debug)]
 pub enum RngCommand {
     GetU32 { reply: RngResponseSender },
 }
 
 pub type RngChannel = Channel<NoopRawMutex, RngCommand, { RNG_QUEUE_SIZE }>;
 
+#[embassy_executor::task]
 pub async fn rng_task(
     mut rng: Rng,
     receiver: Receiver<'static, NoopRawMutex, RngCommand, { RNG_QUEUE_SIZE }>,
