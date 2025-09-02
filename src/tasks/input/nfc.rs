@@ -2,7 +2,7 @@ use defmt::{error, info};
 use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Timer};
-use ector::{Actor, Address, Inbox};
+use ector::{Actor, DynamicAddress, Inbox};
 use esp_hal::gpio::Output;
 use esp_hal::spi::master::Spi;
 use esp_hal::Async;
@@ -64,7 +64,7 @@ impl NfcActor {
 impl Actor for NfcActor {
     type Message = !;
 
-    async fn on_mount<M>(&mut self, _: Address<Self::Message>, _inbox: M) -> !
+    async fn on_mount<M>(&mut self, _: DynamicAddress<Self::Message>, _inbox: M) -> !
     where
         M: Inbox<Self::Message>,
     {

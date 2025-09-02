@@ -9,13 +9,13 @@
 use airsoft_v2::app::App;
 use airsoft_v2::devices::neopixel::NeoPixelStrip;
 use airsoft_v2::events::{EventBus, EventChannel, TaskSenders};
-use airsoft_v2::tasks::input::{keypad::keypad_task, nfc::nfc_task};
-use airsoft_v2::tasks::output::{
-    lights::{lights_task, LightsChannel},
-    sound::{sound_task, SoundChannel},
-};
-use airsoft_v2::tasks::rng::{rng_task, RngChannel};
-use airsoft_v2::tasks::ticker::tick_task;
+use airsoft_v2::tasks::input::keypad::KeypadActor;
+use airsoft_v2::tasks::input::nfc::NfcActor;
+use airsoft_v2::tasks::output::lights::{LightsActor, LightsCommand};
+use airsoft_v2::tasks::output::sound::{SoundActor, SoundCommand};
+use airsoft_v2::tasks::rng::{RngActor, RngRequest};
+use airsoft_v2::tasks::ticker::TickerActor;
+use ector::actor;
 use airsoft_v2::tasks::web::{self, WebApp};
 use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
 use airsoft_v2::{devices::keypad, game_state, mk_static};
@@ -74,9 +74,6 @@ const KEYPAD_ADDRESS: u8 = 0x20; // or 0x21-0x27
 static I2C_BUS: StaticCell<BlockingMutex<NoopRawMutex, RefCell<I2cType>>> = StaticCell::new();
 static SPI_BUS: StaticCell<Mutex<NoopRawMutex, Spi<'static, Async>>> = StaticCell::new();
 static EVENT_CHANNEL: StaticCell<EventChannel> = StaticCell::new();
-static RNG_CHANNEL: StaticCell<RngChannel> = StaticCell::new();
-static LIGHTS_CHANNEL: StaticCell<LightsChannel> = StaticCell::new();
-static SOUND_CHANNEL: StaticCell<SoundChannel> = StaticCell::new();
 static DISPLAY: StaticCell<OledDisplayType<'static>> = StaticCell::new();
 
 #[esp_hal_embassy::main]
@@ -126,11 +123,7 @@ async fn main(spawner: Spawner) {
         NUM_LEDS,
     );
 
-    let lights_channel = LIGHTS_CHANNEL.init(LightsChannel::new());
-    spawner.must_spawn(lights_task(
-        lights_channel.receiver(),
-        led_strip,
-    ));
+    let lights_addr = actor!(spawner, lights, LightsActor<BUFFER_SIZE>, LightsActor::new(led_strip));
 
     let ledc = mk_static!(Ledc, Ledc::new(peripherals.LEDC));
     ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
@@ -141,19 +134,17 @@ async fn main(spawner: Spawner) {
         peripherals.GPIO25,
     );
 
-    let sound_channel = SOUND_CHANNEL.init(SoundChannel::new());
-    spawner.must_spawn(sound_task(buzzer, sound_channel.receiver()));
+    let sound_addr = actor!(spawner, sound, SoundActor, SoundActor::new(buzzer));
 
-    let rng_channel = RNG_CHANNEL.init(RngChannel::new());
-    spawner.must_spawn(rng_task(rng, rng_channel.receiver()));
+    let rng_addr = actor!(spawner, rng, RngActor, RngActor::new(rng));
 
     let event_channel = EVENT_CHANNEL.init(EventChannel::new());
     let event_bus = EventBus::new(event_channel);
 
     let task_senders = TaskSenders {
-        lights: lights_channel.sender(),
-        sound: sound_channel.sender(),
-        rng: rng_channel.sender(),
+        lights: lights_addr,
+        sound: sound_addr,
+        rng: rng_addr,
     };
 
     let keypad_i2c = I2cDevice::new(i2c_bus);
@@ -184,9 +175,9 @@ async fn main(spawner: Spawner) {
     );
 
     // Spawn input tasks
-    spawner.must_spawn(keypad_task(keypad, event_bus.event_sender));
-    spawner.must_spawn(nfc_task(pn532, event_bus.event_sender));
-    spawner.must_spawn(tick_task(event_bus.event_sender));
+    actor!(spawner, keypad, KeypadActor, KeypadActor::new(keypad, event_bus.event_sender));
+    actor!(spawner, nfc, NfcActor, NfcActor::new(pn532, event_bus.event_sender));
+    actor!(spawner, ticker, TickerActor, TickerActor::new(event_bus.event_sender));
 
     game_state::init_game_state();
     info!("Game state initialized!");

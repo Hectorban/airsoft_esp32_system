@@ -1,5 +1,5 @@
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, channel::Sender};
-use ector::{Actor, Address, Inbox};
+use ector::{Actor, DynamicAddress, Inbox};
 use defmt::info;
 use embassy_time::{Duration, Timer};
 
@@ -25,7 +25,7 @@ impl KeypadActor {
 impl Actor for KeypadActor {
     type Message = !;
 
-    async fn on_mount<M>(&mut self, _: Address<Self::Message>, _inbox: M) -> !
+    async fn on_mount<M>(&mut self, _: DynamicAddress<Self::Message>, _inbox: M) -> !
     where
         M: Inbox<Self::Message>,
     {

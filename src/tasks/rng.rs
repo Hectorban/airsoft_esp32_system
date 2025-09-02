@@ -1,4 +1,4 @@
-use ector::{Actor, Address, Inbox, Request};
+use ector::{Actor, DynamicAddress, Inbox, Request};
 use esp_hal::rng::Rng;
 
 pub type RngRequest = Request<(), u32>;
@@ -16,7 +16,7 @@ impl RngActor {
 impl Actor for RngActor {
     type Message = RngRequest;
 
-    async fn on_mount<M>(&mut self, _: Address<Self::Message>, mut inbox: M) -> !
+    async fn on_mount<M>(&mut self, _: DynamicAddress<Self::Message>, mut inbox: M) -> !
     where
         M: Inbox<Self::Message>,
     {

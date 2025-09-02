@@ -1,5 +1,5 @@
 use embassy_time::Duration;
-use ector::{Actor, Address, Inbox};
+use ector::{Actor, DynamicAddress, Inbox};
 use esp_hal_buzzer::{notes::*, song, ToneValue};
 
 #[derive(Clone)]
@@ -70,7 +70,7 @@ impl SoundActor {
 impl Actor for SoundActor {
     type Message = SoundCommand;
 
-    async fn on_mount<M>(&mut self, _: Address<Self::Message>, mut inbox: M) -> !
+    async fn on_mount<M>(&mut self, _: DynamicAddress<Self::Message>, mut inbox: M) -> !
     where
         M: Inbox<Self::Message>,
     {

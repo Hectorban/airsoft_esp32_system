@@ -27,9 +27,9 @@ pub enum Command {
 }
 
 pub struct TaskSenders {
-    pub lights: Address<lights::LightsCommand>,
-    pub sound: Address<sound::SoundCommand>,
-    pub rng: Address<RngRequest>,
+    pub lights: Address<lights::LightsCommand, NoopRawMutex>,
+    pub sound: Address<sound::SoundCommand, NoopRawMutex>,
+    pub rng: Address<RngRequest, NoopRawMutex>,
 }
 
 pub struct EventBus {
