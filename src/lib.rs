@@ -8,6 +8,10 @@ pub mod tasks;
 pub mod app;
 pub mod game_state;
 pub mod graphics;
+pub mod views;
+
+extern crate alloc;
+
 
 #[macro_export]
 macro_rules! mk_static {
