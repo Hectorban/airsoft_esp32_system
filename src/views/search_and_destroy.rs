@@ -1,14 +1,7 @@
 use ratatui::{
     Frame,
-    layout::{Rect, Layout, Direction, Constraint},
-    style::{Style, Color, Modifier},
-    text::{Line, Span},
-    widgets::{Block, Borders, Gauge, List, ListItem},
+    layout::{Rect},
 };
-use alloc::format;
-use alloc::vec::Vec;
-use alloc::vec;
-use alloc::string::ToString;
 
 use crate::{
     events::{InputEvent, TaskSenders},
@@ -16,6 +9,12 @@ use crate::{
 };
 
 use super::{View, ViewType, NavigationAction};
+
+mod configuration;
+mod waiting;
+mod active;
+mod planted;
+mod ended;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SearchAndDestroyPhase {
@@ -35,18 +34,18 @@ pub enum SearchAndDestroyGameState {
 }
 
 pub struct SearchAndDestroyView {
-    phase: SearchAndDestroyPhase,
-    game_state: SearchAndDestroyGameState,
-    round_number: u32,
-    terrorist_score: u32,
-    counter_terrorist_score: u32,
-    round_time_remaining: u32, // in seconds
-    bomb_time_remaining: Option<u32>, // Some when bomb is planted
-    max_rounds: u32,
+    pub(super) phase: SearchAndDestroyPhase,
+    pub(super) game_state: SearchAndDestroyGameState,
+    pub(super) round_number: u32,
+    pub(super) terrorist_score: u32,
+    pub(super) counter_terrorist_score: u32,
+    pub(super) round_time_remaining: u32, // in seconds
+    pub(super) bomb_time_remaining: Option<u32>, // Some when bomb is planted
+    pub(super) max_rounds: u32,
     // Configuration options
-    selected_config_index: usize,
-    round_time_minutes: u32,
-    bomb_timer_seconds: u32,
+    pub(super) selected_config_index: usize,
+    pub(super) round_time_minutes: u32,
+    pub(super) bomb_timer_seconds: u32,
 }
 
 impl Default for SearchAndDestroyView {
@@ -72,17 +71,17 @@ impl SearchAndDestroyView {
         }
     }
 
-    fn start_configuration(&mut self) {
+    pub(super) fn start_configuration(&mut self) {
         self.phase = SearchAndDestroyPhase::Configuration;
         self.selected_config_index = 0;
     }
 
-    fn apply_configuration(&mut self) {
+    pub(super) fn apply_configuration(&mut self) {
         self.round_time_remaining = self.round_time_minutes * 60;
         self.phase = SearchAndDestroyPhase::WaitingToStart;
     }
 
-    fn move_config_selection_up(&mut self) {
+    pub(super) fn move_config_selection_up(&mut self) {
         if self.selected_config_index > 0 {
             self.selected_config_index -= 1;
         } else {
@@ -90,7 +89,7 @@ impl SearchAndDestroyView {
         }
     }
     
-    fn move_config_selection_down(&mut self) {
+    pub(super) fn move_config_selection_down(&mut self) {
         if self.selected_config_index < 2 {
             self.selected_config_index += 1;
         } else {
@@ -98,7 +97,7 @@ impl SearchAndDestroyView {
         }
     }
 
-    fn adjust_config_value(&mut self, increase: bool) {
+    pub(super) fn adjust_config_value(&mut self, increase: bool) {
         match self.selected_config_index {
             0 => { // Max rounds
                 if increase && self.max_rounds < 30 {
@@ -125,7 +124,7 @@ impl SearchAndDestroyView {
         }
     }
     
-    fn start_round(&mut self, task_senders: &TaskSenders) {
+    pub(super) fn start_round(&mut self, task_senders: &TaskSenders) {
         self.game_state = SearchAndDestroyGameState::RoundActive;
         self.phase = SearchAndDestroyPhase::RoundActive;
         self.round_number += 1;
@@ -188,354 +187,30 @@ impl SearchAndDestroyView {
         self.bomb_time_remaining = None;
     }
     
-    fn is_match_over(&self) -> bool {
+    pub(super) fn is_match_over(&self) -> bool {
         let half_rounds = self.max_rounds / 2;
         self.terrorist_score > half_rounds || self.counter_terrorist_score > half_rounds
-    }
-
-    fn render_configuration(&self, frame: &mut Frame, area: Rect) {
-        let config_items: Vec<ListItem> = [format!("Max Rounds: {}", self.max_rounds),
-            format!("Round Time: {}min", self.round_time_minutes),
-            format!("Bomb Timer: {}s", self.bomb_timer_seconds)]
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            let style = if i == self.selected_config_index {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::White)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            
-            ListItem::new(Line::from(Span::styled(item.clone(), style)))
-        })
-        .collect();
-
-        let instructions = Line::from(vec![
-            " ↑ ".into(),
-            "<A>".into(),
-            " ↓ ".into(),
-            "<D>".into(),
-            " ± ".into(),
-            "<B>".into(),
-        ]);
-        
-        let config_list = List::new(config_items)
-            .block(Block::default()
-                .title("Search & Destroy Config")
-                .title_bottom(instructions)
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Yellow)));
-        
-        frame.render_widget(config_list, area);
-    }
-
-    fn render_waiting(&self, frame: &mut Frame, area: Rect) {
-        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
-            format!("Round: {}/{}", self.round_number, self.max_rounds),
-            format!("Time: {}min", self.round_time_minutes),
-            "Ready to start...".to_string()]
-        .iter()
-        .map(|item| ListItem::new(Line::from(Span::styled(item.clone(), Style::default().fg(Color::White)))))
-        .collect();
-
-        let instructions = Line::from(vec![
-            "Start ".into(),
-            "<1>".into(),
-            " Back ".into(),
-            "<0>".into(),
-        ]);
-        
-        let info_list = List::new(info_items)
-            .block(Block::default()
-                .title("Waiting to Start")
-                .title_bottom(instructions)
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Green)));
-        
-        frame.render_widget(info_list, area);
-    }
-
-    fn render_round_active(&self, frame: &mut Frame, area: Rect) {
-        // Calculate timer ratio
-        let timer_ratio = self.round_time_remaining as f64 / (self.round_time_minutes * 60) as f64;
-        let minutes = self.round_time_remaining / 60;
-        let seconds = self.round_time_remaining % 60;
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // Timer
-                Constraint::Min(0),    // Info
-            ])
-            .split(area);
-
-        // Timer gauge
-        let timer_gauge = Gauge::default()
-            .block(Block::default().title("Round Timer").borders(Borders::ALL))
-            .gauge_style(Style::default().fg(Color::Blue))
-            .ratio(timer_ratio)
-            .label(format!("{minutes}:{seconds:02}"));
-        frame.render_widget(timer_gauge, chunks[0]);
-
-        // Info list
-        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
-            format!("Round: {}/{}", self.round_number, self.max_rounds),
-            "Round Active".to_string()]
-        .iter()
-        .map(|item| ListItem::new(Line::from(Span::styled(item.clone(), Style::default().fg(Color::White)))))
-        .collect();
-
-        let instructions = Line::from(vec![
-            "Plant ".into(),
-            "<3>".into(),
-            " End ".into(),
-            "<6/9>".into(),
-        ]);
-        
-        let info_list = List::new(info_items)
-            .block(Block::default()
-                .title("Round in Progress")
-                .title_bottom(instructions)
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Yellow)));
-        
-        frame.render_widget(info_list, chunks[1]);
-    }
-
-    fn render_bomb_planted(&self, frame: &mut Frame, area: Rect) {
-        let bomb_time = self.bomb_time_remaining.unwrap_or(0);
-        let timer_ratio = bomb_time as f64 / self.bomb_timer_seconds as f64;
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // Bomb timer
-                Constraint::Min(0),    // Info
-            ])
-            .split(area);
-
-        // Bomb timer gauge
-        let bomb_gauge = Gauge::default()
-            .block(Block::default().title("BOMB TIMER").borders(Borders::ALL))
-            .gauge_style(Style::default().fg(Color::Red))
-            .ratio(timer_ratio)
-            .label(format!("{bomb_time}s"));
-        frame.render_widget(bomb_gauge, chunks[0]);
-
-        // Info list
-        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
-            format!("Round: {}/{}", self.round_number, self.max_rounds),
-            "BOMB PLANTED!".to_string()]
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            let style = if i == 2 {
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            ListItem::new(Line::from(Span::styled(item.clone(), style)))
-        })
-        .collect();
-
-        let instructions = Line::from(vec![
-            "Defuse ".into(),
-            "<7>".into(),
-            " End ".into(),
-            "<6/9>".into(),
-        ]);
-        
-        let info_list = List::new(info_items)
-            .block(Block::default()
-                .title("Bomb Planted")
-                .title_bottom(instructions)
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Red)));
-        
-        frame.render_widget(info_list, chunks[1]);
-    }
-
-    fn render_round_ended(&self, frame: &mut Frame, area: Rect) {
-        let (winner_msg, winner_color) = if self.is_match_over() {
-            if self.terrorist_score > self.counter_terrorist_score {
-                ("TERRORISTS WIN MATCH!", Color::Red)
-            } else {
-                ("CT WIN MATCH!", Color::Blue)
-            }
-        } else {
-            ("Round Complete", Color::Green)
-        };
-
-        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
-            format!("Round: {}/{}", self.round_number, self.max_rounds),
-            winner_msg.to_string()]
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            let style = if i == 2 {
-                Style::default().fg(winner_color).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            ListItem::new(Line::from(Span::styled(item.clone(), style)))
-        })
-        .collect();
-
-        let instructions = if self.is_match_over() {
-            Line::from(vec![
-                "Config ".into(),
-                "<1>".into(),
-                " Back ".into(),
-                "<0>".into(),
-            ])
-        } else {
-            Line::from(vec![
-                "Next ".into(),
-                "<1>".into(),
-                " Back ".into(),
-                "<0>".into(),
-            ])
-        };
-        
-        let info_list = List::new(info_items)
-            .block(Block::default()
-                .title("Round Results")
-                .title_bottom(instructions)
-                .borders(Borders::ALL)
-                .style(Style::default().fg(winner_color)));
-        
-        frame.render_widget(info_list, area);
     }
 }
 
 impl View for SearchAndDestroyView {
     fn handle_input(&mut self, event: InputEvent, task_senders: &TaskSenders) -> Option<NavigationAction> {
-        match event {
-            InputEvent::KeypadEvent(key) => {
-                match self.phase {
-                    SearchAndDestroyPhase::Configuration => {
-                        match key {
-                            'a' | 'A' => { // Move up
-                                self.move_config_selection_up();
-                                None
-                            },
-                            'd' | 'D' => { // Move down
-                                self.move_config_selection_down();
-                                None
-                            },
-                            'b' | 'B' => { // Adjust value (will cycle through + and -)
-                                // For now, just increase. We can add decrease with different key later
-                                self.adjust_config_value(true);
-                                None
-                            },
-                            '1' => { // Start game
-                                self.apply_configuration();
-                                None
-                            },
-                            '0' => { // Back to main menu
-                                Some(NavigationAction::Back)
-                            },
-                            _ => None,
-                        }
-                    },
-                    SearchAndDestroyPhase::WaitingToStart => {
-                        match key {
-                            '1' => { // Start round
-                                self.start_round(task_senders);
-                                None
-                            },
-                            '0' => { // Back to main menu
-                                Some(NavigationAction::Back)
-                            },
-                            _ => None,
-                        }
-                    },
-                    SearchAndDestroyPhase::RoundActive => {
-                        match key {
-                            '3' => { // Plant bomb
-                                self.plant_bomb(task_senders);
-                                None
-                            },
-                            '9' => { // Terrorists win round
-                                self.end_round(true, task_senders);
-                                None
-                            },
-                            '6' => { // Counter-terrorists win round
-                                self.end_round(false, task_senders);
-                                None
-                            },
-                            '0' => { // Back to main menu
-                                Some(NavigationAction::Back)
-                            },
-                            _ => None,
-                        }
-                    },
-                    SearchAndDestroyPhase::BombPlanted => {
-                        match key {
-                            '7' => { // Defuse bomb
-                                self.defuse_bomb(task_senders);
-                                None
-                            },
-                            '9' => { // Terrorists win round
-                                self.end_round(true, task_senders);
-                                None
-                            },
-                            '6' => { // Counter-terrorists win round
-                                self.end_round(false, task_senders);
-                                None
-                            },
-                            '0' => { // Back to main menu
-                                Some(NavigationAction::Back)
-                            },
-                            _ => None,
-                        }
-                    },
-                    SearchAndDestroyPhase::RoundEnded => {
-                        match key {
-                            '1' => { // Next round or restart
-                                if self.is_match_over() {
-                                    self.reset_game();
-                                    self.phase = SearchAndDestroyPhase::Configuration;
-                                } else {
-                                    self.next_round_or_end();
-                                }
-                                None
-                            },
-                            '0' => { // Back to main menu
-                                Some(NavigationAction::Back)
-                            },
-                            _ => None,
-                        }
-                    },
-                }
-            },
-            InputEvent::CardDetected => {
-                // NFC could be used for bomb planting/defusing
-                match self.phase {
-                    SearchAndDestroyPhase::RoundActive => {
-                        self.plant_bomb(task_senders);
-                    },
-                    SearchAndDestroyPhase::BombPlanted => {
-                        self.defuse_bomb(task_senders);
-                    },
-                    _ => {}
-                }
-                None
-            },
-            _ => None,
+        match self.phase {
+            SearchAndDestroyPhase::Configuration => configuration::handle_input(self, event),
+            SearchAndDestroyPhase::WaitingToStart => waiting::handle_input(self, event, task_senders),
+            SearchAndDestroyPhase::RoundActive => active::handle_input(self, event, task_senders),
+            SearchAndDestroyPhase::BombPlanted => planted::handle_input(self, event, task_senders),
+            SearchAndDestroyPhase::RoundEnded => ended::handle_input(self, event),
         }
     }
     
     fn render(&self, frame: &mut Frame, area: Rect) {
         match self.phase {
-            SearchAndDestroyPhase::Configuration => self.render_configuration(frame, area),
-            SearchAndDestroyPhase::WaitingToStart => self.render_waiting(frame, area),
-            SearchAndDestroyPhase::RoundActive => self.render_round_active(frame, area),
-            SearchAndDestroyPhase::BombPlanted => self.render_bomb_planted(frame, area),
-            SearchAndDestroyPhase::RoundEnded => self.render_round_ended(frame, area),
+            SearchAndDestroyPhase::Configuration => configuration::render(self, frame, area),
+            SearchAndDestroyPhase::WaitingToStart => waiting::render(self, frame, area),
+            SearchAndDestroyPhase::RoundActive => active::render(self, frame, area),
+            SearchAndDestroyPhase::BombPlanted => planted::render(self, frame, area),
+            SearchAndDestroyPhase::RoundEnded => ended::render(self, frame, area),
         }
     }
     
