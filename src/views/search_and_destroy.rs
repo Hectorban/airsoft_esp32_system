@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Rect, Layout, Direction, Constraint},
     style::{Style, Color, Modifier},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Gauge, List, ListItem},
+    widgets::{Block, Borders, Gauge, List, ListItem},
 };
 use alloc::format;
 use alloc::vec::Vec;
@@ -194,11 +194,9 @@ impl SearchAndDestroyView {
     }
 
     fn render_configuration(&self, frame: &mut Frame, area: Rect) {
-        let config_items: Vec<ListItem> = vec![
-            format!("Max Rounds: {}", self.max_rounds),
+        let config_items: Vec<ListItem> = [format!("Max Rounds: {}", self.max_rounds),
             format!("Round Time: {}min", self.round_time_minutes),
-            format!("Bomb Timer: {}s", self.bomb_timer_seconds),
-        ]
+            format!("Bomb Timer: {}s", self.bomb_timer_seconds)]
         .iter()
         .enumerate()
         .map(|(i, item)| {
@@ -235,12 +233,10 @@ impl SearchAndDestroyView {
     }
 
     fn render_waiting(&self, frame: &mut Frame, area: Rect) {
-        let info_items: Vec<ListItem> = vec![
-            format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
+        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
             format!("Round: {}/{}", self.round_number, self.max_rounds),
             format!("Time: {}min", self.round_time_minutes),
-            "Ready to start...".to_string(),
-        ]
+            "Ready to start...".to_string()]
         .iter()
         .map(|item| ListItem::new(Line::from(Span::styled(item.clone(), Style::default().fg(Color::White)))))
         .collect();
@@ -281,15 +277,13 @@ impl SearchAndDestroyView {
             .block(Block::default().title("Round Timer").borders(Borders::ALL))
             .gauge_style(Style::default().fg(Color::Blue))
             .ratio(timer_ratio)
-            .label(format!("{}:{:02}", minutes, seconds));
+            .label(format!("{minutes}:{seconds:02}"));
         frame.render_widget(timer_gauge, chunks[0]);
 
         // Info list
-        let info_items: Vec<ListItem> = vec![
-            format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
+        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
             format!("Round: {}/{}", self.round_number, self.max_rounds),
-            "Round Active".to_string(),
-        ]
+            "Round Active".to_string()]
         .iter()
         .map(|item| ListItem::new(Line::from(Span::styled(item.clone(), Style::default().fg(Color::White)))))
         .collect();
@@ -328,15 +322,13 @@ impl SearchAndDestroyView {
             .block(Block::default().title("BOMB TIMER").borders(Borders::ALL))
             .gauge_style(Style::default().fg(Color::Red))
             .ratio(timer_ratio)
-            .label(format!("{}s", bomb_time));
+            .label(format!("{bomb_time}s"));
         frame.render_widget(bomb_gauge, chunks[0]);
 
         // Info list
-        let info_items: Vec<ListItem> = vec![
-            format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
+        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
             format!("Round: {}/{}", self.round_number, self.max_rounds),
-            "BOMB PLANTED!".to_string(),
-        ]
+            "BOMB PLANTED!".to_string()]
         .iter()
         .enumerate()
         .map(|(i, item)| {
@@ -377,11 +369,9 @@ impl SearchAndDestroyView {
             ("Round Complete", Color::Green)
         };
 
-        let info_items: Vec<ListItem> = vec![
-            format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
+        let info_items: Vec<ListItem> = [format!("T: {} | CT: {}", self.terrorist_score, self.counter_terrorist_score),
             format!("Round: {}/{}", self.round_number, self.max_rounds),
-            winner_msg.to_string(),
-        ]
+            winner_msg.to_string()]
         .iter()
         .enumerate()
         .map(|(i, item)| {
