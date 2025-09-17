@@ -224,7 +224,7 @@ impl View for BattlefieldView {
                     _ => None,
                 }
             },
-            InputEvent::CardDetected => {
+            InputEvent::CardDetected(_) => {
                 // NFC could be used for point capture
                 if self.game_state == BattlefieldGameState::Active {
                     // Randomly assign to team based on some logic or use RNG

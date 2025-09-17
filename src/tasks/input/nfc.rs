@@ -98,7 +98,7 @@ impl Actor for NfcActor {
                                 info!("Card UID: {:?}", uid);
 
                                 // Send event to the game system
-                                self.app_address.notify(InputEvent::CardDetected).await;
+                                self.app_address.notify(InputEvent::CardDetected(uid.clone().to_vec())).await;
 
                                 // Prevent rapid re-detection of the same card
                                 Timer::after(Duration::from_millis(2000)).await;

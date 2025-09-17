@@ -1,13 +1,14 @@
 use crate::tasks::output::{lights, sound};
 use crate::tasks::rng::RngRequest;
+use alloc::vec::Vec;
 use ector::mutex::NoopRawMutex as EctorNoopRawMutex;
 use ector::Address;
 
 /// Input events sent directly to the App actor
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InputEvent {
     KeypadEvent(char),
-    CardDetected,
+    CardDetected(Vec<u8>),
     GameTick,
     None,
 }

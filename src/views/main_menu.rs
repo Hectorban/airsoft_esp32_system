@@ -1,9 +1,9 @@
 use ratatui::{
     Frame,
-    layout::{Rect, Layout, Direction, Constraint},
+    layout::Rect,
     style::{Style, Color, Modifier},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem},
 };
 use alloc::vec::Vec;
 use alloc::vec;
@@ -87,12 +87,9 @@ impl View for MainMenuView {
                     _ => None,
                 }
             },
-            InputEvent::CardDetected => {
-                // NFC detected on main menu - could be used for quick game selection
-                task_senders.sound.try_send(SoundCommand::Beep).ok();
+            _ => {
                 None
             },
-            _ => None,
         }
     }
     

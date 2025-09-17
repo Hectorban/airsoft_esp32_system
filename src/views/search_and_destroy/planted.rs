@@ -38,7 +38,7 @@ pub(super) fn handle_input(view: &mut SearchAndDestroyView, event: InputEvent, t
                 _ => None,
             }
         },
-        InputEvent::CardDetected => {
+        InputEvent::CardDetected(_) => {
             view.defuse_bomb(task_senders);
             None
         },

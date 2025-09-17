@@ -261,7 +261,7 @@ impl View for TheFinalsView {
                     _ => None,
                 }
             },
-            InputEvent::CardDetected => {
+            InputEvent::CardDetected(_) => {
                 // This is the key feature - NFC tokens for cash pickup
                 self.pickup_token_nfc(task_senders);
                 None

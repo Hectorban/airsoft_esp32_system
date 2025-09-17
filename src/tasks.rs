@@ -4,3 +4,4 @@ pub mod rng;
 pub mod ticker;
 pub mod wifi;
 pub mod web;
+pub mod ble;

@@ -15,8 +15,7 @@ use airsoft_v2::tasks::output::lights::{LightsActor, LightsCommand};
 use airsoft_v2::tasks::output::sound::{SoundActor, SoundCommand};
 use airsoft_v2::tasks::rng::{RngActor, RngRequest};
 use airsoft_v2::tasks::ticker::TickerActor;
-use airsoft_v2::tasks::web::{self, WebApp};
-use airsoft_v2::tasks::wifi::{dhcp_server, start_wifi};
+use airsoft_v2::tasks::ble;
 use airsoft_v2::{devices::keypad, game_state, mk_static};
 use ector::mutex::NoopRawMutex as EctorNoopRawMutex;
 use ector::{ActorContext, actor};
@@ -43,7 +42,7 @@ use esp_hal::{Async, i2c};
 use esp_hal_buzzer::Buzzer;
 use esp_hal_smartled::{SmartLedsAdapter, buffer_size, smart_led_buffer};
 use esp_println as _;
-use esp_wifi::EspWifiController;
+use esp_wifi::ble::controller::BleConnector;
 use mousefood::{EmbeddedBackend, EmbeddedBackendConfig};
 use pn532::{
     Pn532,
@@ -88,29 +87,24 @@ async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(config);
 
     esp_alloc::heap_allocator!(size: 64 * 1024);
-    //esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024);
+    esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024);
 
     let timer0 = TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timer0.timer0);
     info!("Embassy initialized!");
 
     let rng = esp_hal::rng::Rng::new(peripherals.RNG);
-    // let timer1 = TimerGroup::new(peripherals.TIMG0);
-    // let esp_wifi_ctrl = mk_static!(
-    //     EspWifiController<'static>,
-    //     esp_wifi::init(timer1.timer0, rng).unwrap()
-    // );
+    let timer1 = TimerGroup::new(peripherals.TIMG0);
+    let esp_wifi_ctrl = mk_static!(
+        esp_wifi::EspWifiController<'static>,
+        esp_wifi::init(timer1.timer0, rng).unwrap()
+    );
 
-    // info!("Attempting to start wifi..");
-    // let stack = start_wifi(esp_wifi_ctrl, peripherals.WIFI, rng, &spawner)
-    //     .await
-    //     .expect("Failed to start wifi");
+    info!("Attempting to start BLE..");
+    let ble_connector = BleConnector::new(esp_wifi_ctrl, peripherals.BT);
+    spawner.must_spawn(ble::ble_task(0, ble_connector));
 
-    // let webapp = WebApp::default();
-    // spawner.must_spawn(web::web_task(0, stack, webapp.router, webapp.config));
-    // spawner.must_spawn(dhcp_server(stack));
-
-    // info!("Web server started!");
+    info!("BLE server started!");
 
     let i2c = I2c::new(
         peripherals.I2C0,
@@ -185,21 +179,21 @@ async fn main(spawner: Spawner) {
         spawner,
         keypad_actor,
         KeypadActor,
-        KeypadActor::new(keypad, app_addr.clone()),
+        KeypadActor::new(keypad, app_addr),
         EctorNoopRawMutex
     );
     actor!(
         spawner,
         nfc,
         NfcActor,
-        NfcActor::new(pn532, app_addr.clone()),
+        NfcActor::new(pn532, app_addr),
         EctorNoopRawMutex
     );
     actor!(
         spawner,
         ticker,
         TickerActor,
-        TickerActor::new(app_addr.clone()),
+        TickerActor::new(app_addr),
         EctorNoopRawMutex
     );
 
